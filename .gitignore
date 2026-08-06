@@ -1,0 +1,81 @@
+# ==================== Secrets — НИКОГДА не коммитить ====================
+.env
+*.env
+!.env.example
+*.pem
+*.key
+appsettings.*.local.json
+
+# ==================== .NET / C# ====================
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Dd]ebug/
+[Rr]elease/
+[Xx]64/
+[Xx]86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+*.dll
+*.pdb
+*.cache
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+
+# ==================== Go ====================
+# Скомпилированные бинарники (по названию сервиса, а не расширению — в Go нет
+# единого расширения для исполняемого файла)
+/src/Services/SocialService/SocialService
+/src/Services/SocialService/social-service
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+*.sqlite3
+
+# ==================== Node / Frontend (если появится) ====================
+node_modules/
+dist/
+.next/
+build/
+
+# ==================== Docker ====================
+docker-compose.override.yml
+
+# ==================== IDE ====================
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# ==================== OS ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==================== Логи ====================
+*.log
+logs/
