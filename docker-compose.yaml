@@ -1,0 +1,274 @@
+version: '3.8'
+
+services:
+  # ====================================================================
+  # USER SERVICE
+  # ====================================================================
+  user-service:
+    build:
+      context: ./src/Services/UserService
+      dockerfile: Dockerfile
+    container_name: goydagram-user-service
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=user-db;Port=5432;Database=${USER_DB_NAME:-userdb};Username=${USER_DB_USER};Password=${USER_DB_PASSWORD}
+      - Redis__ConnectionString=user-redis:6379,password=${REDIS_PASSWORD},abortConnect=false
+      - Jwt__Secret=${JWT_SECRET}
+      - Jwt__Issuer=goydagram
+      - Jwt__Audience=goydagram-users
+      - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    ports:
+      - "5001:8080"
+    depends_on:
+      user-db:
+        condition: service_healthy
+      user-redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - goydagram-network
+
+  user-db:
+    image: postgres:15-alpine
+    container_name: goydagram-user-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${USER_DB_USER}
+      - POSTGRES_PASSWORD=${USER_DB_PASSWORD}
+      - POSTGRES_DB=${USER_DB_NAME:-userdb}
+      - TZ=UTC
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER} -d ${USER_DB_NAME:-userdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - goydagram-network
+
+  user-redis:
+    image: redis:7-alpine
+    container_name: goydagram-user-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - user_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - goydagram-network
+
+  # ====================================================================
+  # SHARED INFRASTRUCTURE
+  # ====================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: goydagram-rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    ports:
+      - "127.0.0.1:5672:5672"   # AMQP
+      - "127.0.0.1:15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - goydagram-network
+
+  # ====================================================================
+  # DEV TOOLS (optional)
+  # ====================================================================
+  adminer:
+    image: adminer:latest
+    container_name: goydagram-adminer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8080"
+    depends_on:
+      user-db:
+        condition: service_healthy
+    networks:
+      - goydagram-network
+
+  # ====================================================================
+  # ЗАГОТОВКИ ПОД ОСТАЛЬНЫЕ СЕРВИСЫ — раскомментировать по мере разработки
+  # ====================================================================
+
+  # content-service:
+  #   build:
+  #     context: ./src/Services/ContentService
+  #     dockerfile: Dockerfile
+  #   container_name: goydagram-content-service
+  #   environment:
+  #     - ConnectionStrings__DefaultConnection=Host=content-db;Port=5432;Database=${CONTENT_DB_NAME:-contentdb};Username=${CONTENT_DB_USER};Password=${CONTENT_DB_PASSWORD}
+  #     - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+  #     - Minio__Endpoint=minio:9000
+  #   depends_on:
+  #     content-db:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #   networks:
+  #     - goydagram-network
+  #
+  # content-db:
+  #   image: postgres:15-alpine
+  #   container_name: goydagram-content-db
+  #   environment:
+  #     - POSTGRES_USER=${CONTENT_DB_USER}
+  #     - POSTGRES_PASSWORD=${CONTENT_DB_PASSWORD}
+  #     - POSTGRES_DB=${CONTENT_DB_NAME:-contentdb}
+  #   volumes:
+  #     - content_db_data:/var/lib/postgresql/data
+  #   networks:
+  #     - goydagram-network
+  #
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: goydagram-minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     - MINIO_ROOT_USER=${MINIO_USER}
+  #     - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
+  #   ports:
+  #     - "127.0.0.1:9000:9000"
+  #     - "127.0.0.1:9001:9001"
+  #   volumes:
+  #     - minio_data:/data
+  #   networks:
+  #     - goydagram-network
+  #
+  # social-service:
+  #   build:
+  #     context: ./src/Services/SocialService
+  #     dockerfile: Dockerfile
+  #   container_name: goydagram-social-service
+  #   environment:
+  #     - MONGO_URI=mongodb://${SOCIAL_DB_USER}:${SOCIAL_DB_PASSWORD}@social-db:27017
+  #     - RABBITMQ_URI=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+  #   depends_on:
+  #     - social-db
+  #     - rabbitmq
+  #   networks:
+  #     - goydagram-network
+  #
+  # social-db:
+  #   image: mongo:7
+  #   container_name: goydagram-social-db
+  #   environment:
+  #     - MONGO_INITDB_ROOT_USERNAME=${SOCIAL_DB_USER}
+  #     - MONGO_INITDB_ROOT_PASSWORD=${SOCIAL_DB_PASSWORD}
+  #   volumes:
+  #     - social_db_data:/data/db
+  #   networks:
+  #     - goydagram-network
+  #
+  # feed-service:
+  #   build:
+  #     context: ./src/Services/FeedService
+  #     dockerfile: Dockerfile
+  #   container_name: goydagram-feed-service
+  #   environment:
+  #     - Services__UserService=http://user-service:8080
+  #     - Services__ContentService=http://content-service:8080
+  #     - Services__SocialService=http://social-service:8080
+  #     - Services__SearchService=http://search-service:8000
+  #   networks:
+  #     - goydagram-network
+  #
+  # search-service:
+  #   build:
+  #     context: ./src/Services/SearchService
+  #     dockerfile: Dockerfile
+  #   container_name: goydagram-search-service
+  #   environment:
+  #     - ELASTICSEARCH_URL=http://search-db:9200
+  #     - RABBITMQ_URI=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+  #   depends_on:
+  #     - search-db
+  #     - rabbitmq
+  #   networks:
+  #     - goydagram-network
+  #
+  # search-db:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+  #   container_name: goydagram-search-db
+  #   environment:
+  #     - discovery.type=single-node
+  #     - xpack.security.enabled=false
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  #   ports:
+  #     - "127.0.0.1:9200:9200"
+  #   volumes:
+  #     - search_db_data:/usr/share/elasticsearch/data
+  #   networks:
+  #     - goydagram-network
+  #
+  # api-gateway:
+  #   build:
+  #     context: ./src/ApiGateway
+  #     dockerfile: Dockerfile
+  #   container_name: goydagram-api-gateway
+  #   ports:
+  #     - "5000:8080"
+  #   depends_on:
+  #     - user-service
+  #     - content-service
+  #     - social-service
+  #     - feed-service
+  #     - search-service
+  #   networks:
+  #     - goydagram-network
+
+# ====================================================================
+volumes:
+  user_db_data:
+    driver: local
+  user_redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  # content_db_data:
+  #   driver: local
+  # minio_data:
+  #   driver: local
+  # social_db_data:
+  #   driver: local
+  # search_db_data:
+  #   driver: local
+
+networks:
+  goydagram-network:
+    driver: bridge
+    name: goydagram-network
