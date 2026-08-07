@@ -11,5 +11,6 @@ public record LoginUserResult(
     Guid UserId,
     string Username,
     string Email,
-    string Token
+    string AccessToken,
+    string RefreshToken
 );

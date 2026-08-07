@@ -7,6 +7,7 @@ public class AppDbContext : DbContext
 {
     public DbSet<User> Users { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -23,8 +24,6 @@ public class AppDbContext : DbContext
             entity.Property(u => u.Bio).HasMaxLength(500);
         });
 
-        // Subscription — самостоятельная сущность, связь с User только через FK,
-        // без навигационных свойств в обе стороны (у User их больше нет).
         modelBuilder.Entity<Subscription>(entity =>
         {
             entity.HasKey(s => s.Id);
@@ -41,6 +40,20 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(s => s.FolloweeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.TokenHash).HasMaxLength(64); // hex SHA-256 = 64 символа
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => t.UserId); // для RevokeAllForUserAsync и уборки истёкших токенов
+            entity.HasIndex(t => t.ExpiresAt); // для периодической чистки протухших записей
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade); // удалили юзера — все его токены не нужны
         });
     }
 }

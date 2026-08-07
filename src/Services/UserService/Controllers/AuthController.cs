@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.Commands.LoginUser;
+using UserService.Application.Commands.Logout;
+using UserService.Application.Commands.RefreshAccessToken;
 using UserService.Application.Commands.RegisterUser;
 
 namespace UserService.Controllers;
@@ -32,5 +34,19 @@ public class AuthController : ControllerBase
         _logger.LogInformation("Login attempt for {Email}", command.Email);
         var result = await _mediator.Send(command);
         return Ok(result);
+    }
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshAccessTokenCommand command)
+    {
+        var result = await _mediator.Send(command);
+        return Ok(result);
+    }
+
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] LogoutCommand command)
+    {
+        await _mediator.Send(command);
+        return NoContent();
     }
 }

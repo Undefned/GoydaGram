@@ -27,11 +27,17 @@ public class RabbitMQEventPublisher : IEventPublisher
             _ => "user.unknown"
         };
 
+        // Persistent = true — сообщение переживёт рестарт брокера (пишется на диск),
+        // без этого при падении RabbitMQ несохранённые сообщения из очереди теряются безвозвратно
+        var props = channel.CreateBasicProperties();
+        props.Persistent = true;
+        props.ContentType = "application/json";
+
         channel.BasicPublish(
             exchange: "user.events",
             routingKey: routingKey,
             mandatory: true,
-            basicProperties: null,
+            basicProperties: props,
             body: body
         );
 

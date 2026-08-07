@@ -14,6 +14,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=user-db;Port=5432;Database=${USER_DB_NAME:-userdb};Username=${USER_DB_USER};Password=${USER_DB_PASSWORD}
+      - Redis__ConnectionString=user-redis:6379,password=${REDIS_PASSWORD},abortConnect=false
       - Jwt__Secret=${JWT_SECRET}
       - Jwt__Issuer=goydagram
       - Jwt__Audience=goydagram-users
@@ -22,6 +23,8 @@ services:
       - "5001:8080"
     depends_on:
       user-db:
+        condition: service_healthy
+      user-redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -44,11 +47,34 @@ services:
       - POSTGRES_DB=${USER_DB_NAME:-userdb}
       - TZ=UTC
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - user_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER} -d ${USER_DB_NAME:-userdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - goydagram-network
+
+  user-redis:
+    image: redis:7-alpine
+    container_name: goydagram-user-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - user_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,8 +93,8 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
     ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI (guest/guest by default, login via env above)
+      - "127.0.0.1:5672:5672"   # AMQP
+      - "127.0.0.1:15672:15672" # Management UI
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -81,14 +107,14 @@ services:
       - goydagram-network
 
   # ====================================================================
-  # DEV TOOLS (optional, только для локальной разработки)
+  # DEV TOOLS (optional)
   # ====================================================================
   adminer:
     image: adminer:latest
     container_name: goydagram-adminer
     restart: unless-stopped
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     depends_on:
       user-db:
         condition: service_healthy
@@ -96,9 +122,7 @@ services:
       - goydagram-network
 
   # ====================================================================
-  # ЗАГОТОВКИ ПОД ОСТАЛЬНЫЕ СЕРВИСЫ — раскомментировать по мере разработки.
-  # Каждый сервис получает СВОЮ БД в СВОЁМ контейнере — не шарим Postgres
-  # между сервисами, чтобы соответствовать Database per Service по-честному.
+  # ЗАГОТОВКИ ПОД ОСТАЛЬНЫЕ СЕРВИСЫ — раскомментировать по мере разработки
   # ====================================================================
 
   # content-service:
@@ -138,8 +162,8 @@ services:
   #     - MINIO_ROOT_USER=${MINIO_USER}
   #     - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
   #   ports:
-  #     - "9000:9000"
-  #     - "9001:9001"
+  #     - "127.0.0.1:9000:9000"
+  #     - "127.0.0.1:9001:9001"
   #   volumes:
   #     - minio_data:/data
   #   networks:
@@ -203,9 +227,9 @@ services:
   #   environment:
   #     - discovery.type=single-node
   #     - xpack.security.enabled=false
-  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"  # ограничиваем память, иначе ES сожрёт весь локальный ПК
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
   #   ports:
-  #     - "9200:9200"
+  #     - "127.0.0.1:9200:9200"
   #   volumes:
   #     - search_db_data:/usr/share/elasticsearch/data
   #   networks:
@@ -230,6 +254,8 @@ services:
 # ====================================================================
 volumes:
   user_db_data:
+    driver: local
+  user_redis_data:
     driver: local
   rabbitmq_data:
     driver: local

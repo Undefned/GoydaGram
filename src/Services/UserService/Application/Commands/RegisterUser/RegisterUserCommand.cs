@@ -12,5 +12,6 @@ public record RegisterUserResult(
     Guid UserId,
     string Username,
     string Email,
-    string Token
+    string AccessToken,
+    string RefreshToken
 );
