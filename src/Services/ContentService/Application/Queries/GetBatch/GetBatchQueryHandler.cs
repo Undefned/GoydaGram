@@ -41,6 +41,7 @@ public class GetBatchQueryHandler(
                     video.Description,
                     video.Duration,
                     video.Url,
+                    video.HlsPlaylistUrl ?? string.Empty,
                     video.PreviewUrl,
                     video.Status.ToString(),
                     video.ViewsCount,

@@ -17,6 +17,10 @@ using MediatR;
 using StackExchange.Redis;
 using Minio;
 using Minio.DataModel.Args;
+using ContentService.Infrastructure.BackgroundJobs;
+using Minio.AspNetCore.HealthChecks;
+
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,6 +81,12 @@ builder.Services.AddScoped<IVideoRepository, VideoRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IStorageService, MinIOStorageService>();
 builder.Services.AddScoped<IThumbnailService, ThumbnailService>();
+builder.Services.AddScoped<IHlsTranscodingService, FfmpegHlsTranscodingService>();
+builder.Services.AddScoped<IEventPublisher, RabbitMQEventPublisher>();
+
+// Очередь фоновой HLS-транскодизации — singleton, шарится между запросами и воркером.
+builder.Services.AddSingleton<IVideoProcessingQueue, VideoProcessingQueue>();
+builder.Services.AddHostedService<VideoProcessingBackgroundService>();
 
 // RabbitMQ
 builder.Services.AddSingleton<RabbitMQConnection>();
@@ -113,13 +123,19 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ==================== Health Checks ====================
+// ==================== Health Checks ====================
 var rabbitConnectionString = builder.Configuration["RabbitMQ:ConnectionString"]
     ?? throw new Exception("RabbitMQ:ConnectionString is not configured");
 
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!, name: "postgres")
     .AddRabbitMQ(rabbitConnectionString, name: "rabbitmq")
-    .AddRedis(redisConnectionString, name: "redis");
+    .AddRedis(redisConnectionString, name: "redis")
+    .AddMinio(
+        sp => sp.GetRequiredService<IMinioClient>(),
+        name: "minio"
+    );
+
 
 // ==================== Graceful Shutdown ====================
 builder.Services.Configure<HostOptions>(options =>
@@ -134,7 +150,6 @@ app.UseSerilogRequestLogging();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -185,6 +200,7 @@ using (var scope = app.Services.CreateScope())
         await minio.SetPolicyAsync(psArgs);
     }
 }
+
 
 // ==================== Graceful shutdown ====================
 app.Lifetime.ApplicationStopping.Register(() =>

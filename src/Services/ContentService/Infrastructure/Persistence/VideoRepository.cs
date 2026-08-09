@@ -88,4 +88,14 @@ public class VideoRepository : IVideoRepository
         if (video != null)
             _context.Videos.Remove(video);
     }
+    public async Task<List<Video>> GetByUserAsync(Guid userId, int limit = 30, int offset = 0)
+    {
+        return await _context.Videos
+            .Where(v => v.UserId == userId)
+            .OrderByDescending(v => v.CreatedAt)
+            .Skip(offset)
+            .Take(limit)
+            .Include(v => v.Tags)
+            .ToListAsync();
+    }
 }

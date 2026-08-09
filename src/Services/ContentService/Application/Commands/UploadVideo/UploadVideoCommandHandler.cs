@@ -1,8 +1,7 @@
 using MediatR;
+using ContentService.Application.Events;
 using ContentService.Application.Interfaces;
 using ContentService.Domain.Entities;
-using ContentService.Domain.Enums;
-using ContentService.Domain.Exceptions;
 using ContentService.Domain.Interfaces;
 
 namespace ContentService.Application.Commands.UploadVideo;
@@ -10,40 +9,29 @@ namespace ContentService.Application.Commands.UploadVideo;
 public class UploadVideoCommandHandler(
     IVideoRepository videoRepository,
     IStorageService storageService,
-    IThumbnailService thumbnailService) : IRequestHandler<UploadVideoCommand, UploadVideoResult>
+    IThumbnailService thumbnailService,
+    IVideoProcessingQueue processingQueue,
+    IEventPublisher eventPublisher) : IRequestHandler<UploadVideoCommand, UploadVideoResult>
 {
     public async Task<UploadVideoResult> Handle(UploadVideoCommand command, CancellationToken cancellationToken)
     {
-        // 1. Generate IDs
         var videoId = Guid.NewGuid();
         var extension = Path.GetExtension(command.FileName);
         var videoPath = $"videos/{command.UserId}/{videoId}{extension}";
         var previewPath = $"previews/{command.UserId}/{videoId}.jpg";
 
-        // 2. Upload video to MinIO
         var url = await storageService.UploadFileAsync(
-            videoPath,
-            command.VideoStream,
-            "video/mp4",
-            cancellationToken);
+            videoPath, command.VideoStream, "video/mp4", cancellationToken);
 
-        // 3. Generate preview (first frame)
+        // Плейсхолдер-превью — быстро и синхронно, чтобы видео сразу появилось в ленте
+        // с картинкой, не дожидаясь тяжёлой HLS-транскодизации.
         var previewUrl = await thumbnailService.GenerateThumbnailAsync(
-            command.VideoStream,
-            previewPath,
-            cancellationToken);
+            command.VideoStream, previewPath, cancellationToken);
 
-        // 4. Create video entity
         var video = Video.Create(
-            command.UserId,
-            command.Title,
-            command.Description,
-            0, // Duration - we'll calculate later (optional)
-            url);
+            command.UserId, command.Title, command.Description, 0, videoPath, url);
+        video.MarkAsReady(previewUrl); // "Ready" = доступен прогрессивный MP4; HLS доедет отдельно
 
-        video.MarkAsReady(previewUrl);
-
-        // 5. Add tags
         var tags = new List<Tag>();
         foreach (var tagName in command.Tags.Distinct())
         {
@@ -52,9 +40,15 @@ public class UploadVideoCommandHandler(
         }
         video.AddTags(tags);
 
-        // 6. Save to DB
         await videoRepository.AddAsync(video);
         await videoRepository.UnitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Search/Feed узнают о новом видео сразу, не дожидаясь окончания HLS-транскодинга.
+        await eventPublisher.PublishAsync(new VideoUploadedEvent(
+            video.Id, video.UserId, video.Title, tags.Select(t => t.Name).ToList(), video.CreatedAt));
+
+        // HLS — тяжёлая CPU-задача (запуск ffmpeg), уходит в фон, не блокирует HTTP-ответ.
+        await processingQueue.EnqueueAsync(video.Id);
 
         return new UploadVideoResult(
             video.Id,

@@ -13,29 +13,26 @@ public class RabbitMQConsumer : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly IConnection _connection;
     private readonly IModel _channel;
-    public IConnection Connection => _connection;
 
     public RabbitMQConsumer(ILogger<RabbitMQConsumer> logger, IServiceProvider serviceProvider, RabbitMQConnection connection)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        // connection._connection было private — не компилировалось. Используем публичное свойство.
         _connection = connection.Connection;
         _channel = _connection.CreateModel();
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Declare queues
         _channel.QueueDeclare("content.social.likes", durable: true, exclusive: false, autoDelete: false);
         _channel.QueueDeclare("content.social.views", durable: true, exclusive: false, autoDelete: false);
         _channel.QueueDeclare("content.social.comments", durable: true, exclusive: false, autoDelete: false);
 
-        // Bind queues to exchanges
         _channel.QueueBind("content.social.likes", "social.events", "social.liked");
         _channel.QueueBind("content.social.views", "social.events", "social.viewed");
         _channel.QueueBind("content.social.comments", "social.events", "social.commented");
 
-        // Start consuming
         ConsumeQueue("content.social.likes", ProcessLikeEvent);
         ConsumeQueue("content.social.views", ProcessViewEvent);
         ConsumeQueue("content.social.comments", ProcessCommentEvent);
@@ -81,7 +78,6 @@ public class RabbitMQConsumer : BackgroundService
         await repository.UpdateAsync(video);
         await repository.UnitOfWork.SaveChangesAsync();
 
-        // Invalidate cache
         await cache.RemoveAsync($"video:{evt.VideoId}");
         await cache.RemoveAsync("trending:videos");
     }
@@ -102,7 +98,6 @@ public class RabbitMQConsumer : BackgroundService
         await repository.UpdateAsync(video);
         await repository.UnitOfWork.SaveChangesAsync();
 
-        // Invalidate cache
         await cache.RemoveAsync($"video:{evt.VideoId}");
         await cache.RemoveAsync("trending:videos");
     }
@@ -123,7 +118,6 @@ public class RabbitMQConsumer : BackgroundService
         await repository.UpdateAsync(video);
         await repository.UnitOfWork.SaveChangesAsync();
 
-        // Invalidate cache
         await cache.RemoveAsync($"video:{evt.VideoId}");
         await cache.RemoveAsync("trending:videos");
     }

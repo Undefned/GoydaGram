@@ -5,7 +5,7 @@ RUN dotnet restore
 COPY . .
 RUN dotnet publish -c Release -o /app
 
-# Install FFmpeg for thumbnail generation
+# Install FFmpeg for HLS transcoding
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

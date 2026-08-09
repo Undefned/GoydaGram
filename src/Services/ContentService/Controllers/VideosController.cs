@@ -6,6 +6,8 @@ using ContentService.Application.Queries.GetVideo;
 using ContentService.Application.Queries.GetBatch;
 using ContentService.Application.Queries.GetTrending;
 using ContentService.Application.Commands.UploadVideo;
+using ContentService.Application.Commands.DeleteVideo;
+using ContentService.Application.Queries.GetUserVideos;
 
 namespace ContentService.Controllers;
 
@@ -62,18 +64,72 @@ public class VideosController : ControllerBase
             request.Description,
             request.Tags?.Split(',').Select(t => t.Trim()).ToList() ?? new(),
             stream,
-            request.File.FileName
+            request.File.FileName,
+            request.File.Length
         );
 
         var result = await _mediator.Send(command);
         return Ok(result);
     }
-}
 
-public class UploadRequest
-{
-    public IFormFile File { get; set; } = null!;
-    public string Title { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public string? Tags { get; set; }
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        // Получаем ID пользователя из токена/контекста
+        var userId = User.FindFirst("userId")?.Value;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var command = new DeleteVideoCommand(id, Guid.Parse(userId));
+        var result = await _mediator.Send(command);
+
+        if (!result.Success)
+        {
+            return result.Message.Contains("not found") 
+                ? NotFound(result) 
+                : BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("user")]
+    public async Task<IActionResult> GetUserVideos([FromQuery] int limit = 30, [FromQuery] int offset = 0)
+    {
+        var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        
+        _logger.LogInformation("Getting videos for user {UserId}, limit: {Limit}, offset: {Offset}", 
+            userId, limit, offset);
+        
+        var query = new GetUserVideosQuery(userId, limit, offset);
+        var result = await _mediator.Send(query);
+        
+        return Ok(new
+        {
+            data = result,
+            pagination = new
+            {
+                limit,
+                offset,
+                total = result.Count // Можно добавить total count если нужно
+            }
+        });
+    }
+    
+    [HttpGet("user/{userId:guid}")]
+    public async Task<IActionResult> GetUserVideosById(Guid userId, [FromQuery] int limit = 30, [FromQuery] int offset = 0)
+    {
+        _logger.LogInformation("Getting videos for user {UserId}", userId);
+        
+        var query = new GetUserVideosQuery(userId, limit, offset);
+        var result = await _mediator.Send(query);
+        
+        return Ok(new
+        {
+            data = result,
+            pagination = new { limit, offset }
+        });
+    }
 }

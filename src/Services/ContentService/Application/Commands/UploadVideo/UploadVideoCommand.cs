@@ -8,12 +8,6 @@ public record UploadVideoCommand(
     string Description,
     List<string> Tags,
     Stream VideoStream,
-    string FileName
+    string FileName,
+    long FileSize
 ) : IRequest<UploadVideoResult>;
-
-public record UploadVideoResult(
-    Guid VideoId,
-    string Url,
-    string PreviewUrl,
-    string Status
-);

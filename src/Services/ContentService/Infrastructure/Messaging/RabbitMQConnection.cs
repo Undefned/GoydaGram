@@ -6,7 +6,6 @@ public class RabbitMQConnection : IDisposable
 {
     private readonly IConnection _connection;
     private readonly IModel _channel;
-    public IConnection Connection => _connection;
 
     public RabbitMQConnection(IConfiguration config)
     {
@@ -17,12 +16,17 @@ public class RabbitMQConnection : IDisposable
         };
         _connection = factory.CreateConnection();
         _channel = _connection.CreateModel();
-        
-        // Declare exchanges
+
         _channel.ExchangeDeclare("video.events", ExchangeType.Topic, durable: true);
         _channel.ExchangeDeclare("social.events", ExchangeType.Topic, durable: true);
     }
 
+    // Публичный IConnection — нужен консьюмеру и паблишеру, чтобы каждый открывал
+    // СВОЙ канал. IModel не потокобезопасен, шарить один channel между несколькими
+    // одновременными операциями нельзя (тот же баг чинили в UserService).
+    public IConnection Connection => _connection;
+
+    // Общий channel используется только для деклараций exchange при старте.
     public IModel Channel => _channel;
 
     public void Dispose()
