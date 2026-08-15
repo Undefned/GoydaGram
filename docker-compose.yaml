@@ -300,6 +300,27 @@ services:
     networks:
       - goydagram-network
   
+  feed-service:
+    build:
+      context: ./src/Services/FeedService
+      dockerfile: Dockerfile
+    container_name: goydagram-feed-service
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - CONTENT_API=http://content-service:8080
+      - USER_API=http://user-service:8080
+      - SOCIAL_API=http://social-service:8080
+      - SEARCH_API=http://search-service:8080
+    ports:
+      - "127.0.0.1:5004:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - goydagram-network
+
   # feed-service:
   #   build:
   #     context: ./src/Services/FeedService
