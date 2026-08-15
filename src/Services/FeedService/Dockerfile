@@ -21,7 +21,7 @@ RUN go build -ldflags="-w -s" -o /feed-service .
 
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates && \
+RUN apk --no-cache add ca-certificates wget && \
     update-ca-certificates
 
 WORKDIR /root/
