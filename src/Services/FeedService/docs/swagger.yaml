@@ -1,0 +1,149 @@
+basePath: /api
+host: localhost:5004
+info:
+  contact:
+    email: support@goydagram.com
+    name: API Support
+    url: http://goydagram.com/support
+  description: Feed generation service for GoydaGram. Provides personalized and trending
+    feeds.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Feed Service API
+  version: "1.0"
+paths:
+  /feed:
+    get:
+      consumes:
+      - application/json
+      description: Get personalized feed for a user with pagination
+      parameters:
+      - description: User ID (from JWT if not provided)
+        in: query
+        name: user_id
+        type: string
+      - default: 0
+        description: Pagination offset
+        in: query
+        name: offset
+        type: integer
+      - default: 30
+        description: Items per page
+        in: query
+        maximum: 50
+        name: limit
+        type: integer
+      - description: Comma-separated list of seen video IDs
+        in: query
+        name: seen
+        type: string
+      - description: Start prefetch in background
+        in: query
+        name: prefetch
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Feed items with pagination
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - User ID required
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user feed
+      tags:
+      - feed
+  /feed/prefetch:
+    get:
+      consumes:
+      - application/json
+      description: Prefetch and cache feed for a specific user
+      parameters:
+      - description: User ID (from JWT if not provided)
+        in: query
+        name: user_id
+        type: string
+      - default: 0
+        description: Pagination offset
+        in: query
+        name: offset
+        type: integer
+      - description: Comma-separated list of seen video IDs
+        in: query
+        name: seen
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Prefetched feed data
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - User ID required
+          schema:
+            additionalProperties: true
+            type: object
+        "408":
+          description: Request timeout
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Prefetch feed for a user
+      tags:
+      - feed
+  /feed/trending:
+    get:
+      consumes:
+      - application/json
+      description: Get list of trending videos globally
+      parameters:
+      - default: 30
+        description: Number of videos
+        in: query
+        maximum: 50
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of trending videos
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get trending videos
+      tags:
+      - feed
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
