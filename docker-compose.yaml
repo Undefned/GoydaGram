@@ -232,32 +232,74 @@ services:
       start_period: 5s
     networks:
       - goydagram-network
-  #
-  # social-service:
-  #   build:
-  #     context: ./src/Services/SocialService
-  #     dockerfile: Dockerfile
-  #   container_name: goydagram-social-service
-  #   environment:
-  #     - MONGO_URI=mongodb://${SOCIAL_DB_USER}:${SOCIAL_DB_PASSWORD}@social-db:27017
-  #     - RABBITMQ_URI=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-  #   depends_on:
-  #     - social-db
-  #     - rabbitmq
-  #   networks:
-  #     - goydagram-network
-  #
-  # social-db:
-  #   image: mongo:7
-  #   container_name: goydagram-social-db
-  #   environment:
-  #     - MONGO_INITDB_ROOT_USERNAME=${SOCIAL_DB_USER}
-  #     - MONGO_INITDB_ROOT_PASSWORD=${SOCIAL_DB_PASSWORD}
-  #   volumes:
-  #     - social_db_data:/data/db
-  #   networks:
-  #     - goydagram-network
-  #
+  
+  social-service:
+    build:
+      context: ./src/Services/SocialService
+      dockerfile: Dockerfile
+    container_name: goydagram-social-service
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - MONGO_URI=mongodb://social-db:27017
+      - MONGO_DB=socialdb
+      - REDIS_URL=social-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - CONTENT_API=http://content-service:8080
+      - USER_API=http://user-service:8080
+    ports:
+      - "127.0.0.1:5003:8080"
+    depends_on:
+      social-db:
+        condition: service_healthy
+      social-redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - goydagram-network
+
+  social-db:
+    image: mongo:7
+    container_name: goydagram-social-db
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - social_db_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - goydagram-network
+
+  social-redis:
+    image: redis:7-alpine
+    container_name: goydagram-social-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6381:6379"
+    volumes:
+      - social_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - goydagram-network
+  
   # feed-service:
   #   build:
   #     context: ./src/Services/FeedService
@@ -328,10 +370,12 @@ volumes:
     driver: local
   minio_data:
     driver: local
-  content_redis_data:  # <--- ДОБАВЬ ВОТ ЭТИ ДВЕ СТРОКИ
+  content_redis_data:
     driver: local      
-  # social_db_data:
-  #   driver: local
+  social_db_data:
+    driver: local      
+  social_redis_data:
+    driver: local      
   # search_db_data:
   #   driver: local
 networks:

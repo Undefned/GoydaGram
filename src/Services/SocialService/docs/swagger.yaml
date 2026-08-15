@@ -1,0 +1,442 @@
+basePath: /api
+definitions:
+  models.CommentRequest:
+    properties:
+      parent_id:
+        type: string
+      text:
+        maxLength: 500
+        minLength: 1
+        type: string
+      user_id:
+        type: string
+      video_id:
+        type: string
+    required:
+    - text
+    - user_id
+    - video_id
+    type: object
+  models.LikeRequest:
+    properties:
+      user_id:
+        type: string
+      video_id:
+        type: string
+    required:
+    - user_id
+    - video_id
+    type: object
+  models.ViewRequest:
+    properties:
+      user_id:
+        type: string
+      video_id:
+        type: string
+    required:
+    - user_id
+    - video_id
+    type: object
+host: localhost:5003
+info:
+  contact:
+    email: support@goydagram.com
+    name: API Support
+  description: Social interaction service for GoydaGram (likes, comments, views, interests)
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Social Service API
+  version: "1.0"
+paths:
+  /comments:
+    post:
+      consumes:
+      - application/json
+      description: Add a comment to a video
+      parameters:
+      - description: Comment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Comment added successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Add a comment
+      tags:
+      - comments
+  /comments/{commentId}:
+    delete:
+      description: Delete a comment by its ID
+      parameters:
+      - description: Comment ID
+        in: path
+        name: commentId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Comment deleted successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a comment
+      tags:
+      - comments
+  /likes:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a like from a video
+      parameters:
+      - description: Unlike request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LikeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Unliked successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Unlike a video
+      tags:
+      - likes
+    post:
+      consumes:
+      - application/json
+      description: Add a like to a video
+      parameters:
+      - description: Like request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LikeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Like added successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Like a video
+      tags:
+      - likes
+  /users/{userId}/interests:
+    get:
+      description: Get the list of inferred interests for a user
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User interests
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user interests
+      tags:
+      - interests
+  /users/{userId}/interests/refresh:
+    post:
+      description: Recompute the inferred interests for a user
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Interests refreshed successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Refresh user interests
+      tags:
+      - interests
+  /videos/{videoId}/comments:
+    get:
+      description: Get paginated list of comments for a specific video
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of comments
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get comments for a video
+      tags:
+      - comments
+  /videos/{videoId}/comments/count:
+    get:
+      description: Get total number of comments for a specific video
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Comments count
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get comments count for a video
+      tags:
+      - comments
+  /videos/{videoId}/likes:
+    get:
+      description: Get paginated list of likes for a specific video
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of likes
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get likes for a video
+      tags:
+      - likes
+  /videos/{videoId}/likes/count:
+    get:
+      description: Get total number of likes for a specific video
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Likes count
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get likes count for a video
+      tags:
+      - likes
+  /videos/{videoId}/views:
+    get:
+      description: Get paginated list of views for a specific video
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of views
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get views for a video
+      tags:
+      - views
+  /videos/{videoId}/views/count:
+    get:
+      description: Get total number of views for a specific video
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Views count
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get views count for a video
+      tags:
+      - views
+  /views:
+    post:
+      consumes:
+      - application/json
+      description: Record that a user viewed a video
+      parameters:
+      - description: View request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ViewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: View recorded successfully
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Record a video view
+      tags:
+      - views
+schemes:
+- http
+- https
+swagger: "2.0"
