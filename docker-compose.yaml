@@ -16,11 +16,11 @@ services:
       - ConnectionStrings__DefaultConnection=Host=user-db;Port=5432;Database=${USER_DB_NAME:-userdb};Username=${USER_DB_USER};Password=${USER_DB_PASSWORD}
       - Redis__ConnectionString=user-redis:6379,password=${REDIS_PASSWORD},abortConnect=false
       - Jwt__Secret=${JWT_SECRET}
-      - Jwt__Issuer=goydagram
-      - Jwt__Audience=goydagram-users
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
       - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     ports:
-      - "5001:8080"
+      - "127.0.0.1:5001:8080"
     depends_on:
       user-db:
         condition: service_healthy
@@ -98,11 +98,11 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
       timeout: 10s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
     networks:
       - goydagram-network
 
@@ -120,10 +120,6 @@ services:
         condition: service_healthy
     networks:
       - goydagram-network
-
-  # ====================================================================
-  # ЗАГОТОВКИ ПОД ОСТАЛЬНЫЕ СЕРВИСЫ — раскомментировать по мере разработки
-  # ====================================================================
 
   # ====================================================================
   # CONTENT SERVICE
@@ -144,10 +140,10 @@ services:
       - Minio__SecretKey=${MINIO_PASSWORD}
       - RabbitMQ__ConnectionString=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - Jwt__Secret=${JWT_SECRET}
-      - Jwt__Issuer=goydagram
-      - Jwt__Audience=goydagram-users
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
     ports:
-      - "5002:8080"
+      - "127.0.0.1:5002:8080"
     depends_on:
       content-db:
         condition: service_healthy
@@ -232,7 +228,10 @@ services:
       start_period: 5s
     networks:
       - goydagram-network
-  
+
+  # ====================================================================
+  # SOCIAL SERVICE
+  # ====================================================================
   social-service:
     build:
       context: ./src/Services/SocialService
@@ -241,8 +240,8 @@ services:
     restart: unless-stopped
     environment:
       - PORT=8080
-      - MONGO_URI=mongodb://social-db:27017
-      - MONGO_DB=socialdb
+      - MONGO_URI=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@social-db:27017
+      - MONGO_DB=${MONGO_DB:-socialdb}
       - REDIS_URL=social-redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -257,6 +256,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - goydagram-network
 
@@ -264,12 +269,15 @@ services:
     image: mongo:7
     container_name: goydagram-social-db
     restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - social_db_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "-u", "${MONGO_USER}", "-p", "${MONGO_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -299,7 +307,10 @@ services:
       start_period: 5s
     networks:
       - goydagram-network
-  
+
+  # ====================================================================
+  # FEED SERVICE
+  # ====================================================================
   feed-service:
     build:
       context: ./src/Services/FeedService
@@ -312,15 +323,30 @@ services:
       - CONTENT_API=http://content-service:8080
       - USER_API=http://user-service:8080
       - SOCIAL_API=http://social-service:8080
-      - SEARCH_API=http://search-service:8080
+      - SEARCH_API=http://search-service:8000
     ports:
       - "127.0.0.1:5004:8080"
     depends_on:
       rabbitmq:
         condition: service_healthy
+      content-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      social-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - goydagram-network
-  
+
+  # ====================================================================
+  # SEARCH SERVICE
+  # ====================================================================
   search-service:
     build:
       context: ./src/Services/SearchService
@@ -333,9 +359,9 @@ services:
       - CONTENT_SERVICE=http://content-service:8080
       - USER_SERVICE=http://user-service:8080
       - SOCIAL_SERVICE=http://social-service:8080
-      - MAX_RESULTS=100
-      - DEFAULT_LIMIT=30
-      - FUZZINESS=AUTO
+      - MAX_RESULTS=${MAX_RESULTS:-100}
+      - DEFAULT_LIMIT=${DEFAULT_LIMIT:-30}
+      - FUZZINESS=${FUZZINESS:-AUTO}
     ports:
       - "127.0.0.1:5005:8000"
     depends_on:
@@ -386,38 +412,50 @@ services:
   # ====================================================================
   # API GATEWAY
   # ====================================================================
-  # api-gateway:
-  #   build:
-  #     context: ./src/ApiGateway
-  #     dockerfile: Dockerfile
-  #   container_name: goydagram-api-gateway
-  #   restart: unless-stopped
-  #   ports:
-  #     - "127.0.0.1:5000:8080"
-  #   depends_on:
-  #     user-service:
-  #       condition: service_healthy
-  #     content-service:
-  #       condition: service_healthy
-  #     social-service:
-  #       condition: service_healthy
-  #     feed-service:
-  #       condition: service_healthy
-  #     search-service:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 15s
-  #   logging:
-  #     driver: "json-file"
-  #     options:
-  #       max-size: "10m"
-  #       max-file: "3"
-  #   networks:
-  #     - goydagram-network
+  api-gateway:
+    build:
+      context: ./src/ApiGateway
+      dockerfile: Dockerfile
+    container_name: goydagram-api-gateway
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+
+      - USER_SERVICE_URL=http://user-service:8080
+      - CONTENT_SERVICE_URL=http://content-service:8080
+      - SOCIAL_SERVICE_URL=http://social-service:8080
+      - FEED_SERVICE_URL=http://feed-service:8080
+      - SEARCH_SERVICE_URL=http://search-service:8000
+    ports:
+      - "127.0.0.1:5000:8080"
+    depends_on:
+      user-service:
+        condition: service_healthy
+      content-service:
+        condition: service_healthy
+      social-service:
+        condition: service_healthy
+      feed-service:
+        condition: service_healthy
+      search-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
 
 # ====================================================================
 volumes:
@@ -432,11 +470,11 @@ volumes:
   minio_data:
     driver: local
   content_redis_data:
-    driver: local      
+    driver: local
   social_db_data:
-    driver: local      
+    driver: local
   social_redis_data:
-    driver: local      
+    driver: local
   search_db_data:
     driver: local
 
