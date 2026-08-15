@@ -320,65 +320,105 @@ services:
         condition: service_healthy
     networks:
       - goydagram-network
+  
+  search-service:
+    build:
+      context: ./src/Services/SearchService
+      dockerfile: Dockerfile
+    container_name: goydagram-search-service
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_URL=http://search-db:9200
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - CONTENT_SERVICE=http://content-service:8080
+      - USER_SERVICE=http://user-service:8080
+      - SOCIAL_SERVICE=http://social-service:8080
+      - MAX_RESULTS=100
+      - DEFAULT_LIMIT=30
+      - FUZZINESS=AUTO
+    ports:
+      - "127.0.0.1:5005:8000"
+    depends_on:
+      search-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
 
-  # feed-service:
-  #   build:
-  #     context: ./src/Services/FeedService
-  #     dockerfile: Dockerfile
-  #   container_name: goydagram-feed-service
-  #   environment:
-  #     - Services__UserService=http://user-service:8080
-  #     - Services__ContentService=http://content-service:8080
-  #     - Services__SocialService=http://social-service:8080
-  #     - Services__SearchService=http://search-service:8000
-  #   networks:
-  #     - goydagram-network
-  #
-  # search-service:
-  #   build:
-  #     context: ./src/Services/SearchService
-  #     dockerfile: Dockerfile
-  #   container_name: goydagram-search-service
-  #   environment:
-  #     - ELASTICSEARCH_URL=http://search-db:9200
-  #     - RABBITMQ_URI=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-  #   depends_on:
-  #     - search-db
-  #     - rabbitmq
-  #   networks:
-  #     - goydagram-network
-  #
-  # search-db:
-  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-  #   container_name: goydagram-search-db
-  #   environment:
-  #     - discovery.type=single-node
-  #     - xpack.security.enabled=false
-  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-  #   ports:
-  #     - "127.0.0.1:9200:9200"
-  #   volumes:
-  #     - search_db_data:/usr/share/elasticsearch/data
-  #   networks:
-  #     - goydagram-network
-  #
+  search-db:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: goydagram-search-db
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - search_db_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    networks:
+      - goydagram-network
+
+  # ====================================================================
+  # API GATEWAY
+  # ====================================================================
   # api-gateway:
   #   build:
   #     context: ./src/ApiGateway
   #     dockerfile: Dockerfile
   #   container_name: goydagram-api-gateway
+  #   restart: unless-stopped
   #   ports:
-  #     - "5000:8080"
+  #     - "127.0.0.1:5000:8080"
   #   depends_on:
-  #     - user-service
-  #     - content-service
-  #     - social-service
-  #     - feed-service
-  #     - search-service
+  #     user-service:
+  #       condition: service_healthy
+  #     content-service:
+  #       condition: service_healthy
+  #     social-service:
+  #       condition: service_healthy
+  #     feed-service:
+  #       condition: service_healthy
+  #     search-service:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 15s
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
   #   networks:
   #     - goydagram-network
 
-# ====================================================================
 # ====================================================================
 volumes:
   user_db_data:
@@ -397,8 +437,9 @@ volumes:
     driver: local      
   social_redis_data:
     driver: local      
-  # search_db_data:
-  #   driver: local
+  search_db_data:
+    driver: local
+
 networks:
   goydagram-network:
     driver: bridge
