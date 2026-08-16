@@ -32,4 +32,10 @@
     <PackageReference Include="StackExchange.Redis" Version="2.7.17" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="UserService.Tests\**\*.cs" />
+    <EmbeddedResource Remove="UserService.Tests\**" />
+    <None Remove="UserService.Tests\**" />
+  </ItemGroup>
+
 </Project>
