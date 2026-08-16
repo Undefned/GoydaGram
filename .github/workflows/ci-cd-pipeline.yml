@@ -151,21 +151,21 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/goydagram-api-gateway:${{ github.sha }}
 
   # ==================== DEPLOY ====================
-  deploy:
-    name: Deploy to Server
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # deploy:
+  #   name: Deploy to Server
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/goydagram
-            docker compose pull
-            docker compose up -d
-            docker system prune -f
+  #   steps:
+  #     - name: Deploy via SSH
+  #       uses: appleboy/ssh-action@v1.0.3
+  #       with:
+  #         host: ${{ secrets.DEPLOY_HOST }}
+  #         username: ${{ secrets.DEPLOY_USER }}
+  #         key: ${{ secrets.DEPLOY_SSH_KEY }}
+  #         script: |
+  #           cd /opt/goydagram
+  #           docker compose pull
+  #           docker compose up -d
+  #           docker system prune -f
