@@ -38,4 +38,10 @@
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="ContentService.Tests\**\*.cs" />
+    <EmbeddedResource Remove="ContentService.Tests\**" />
+    <None Remove="ContentService.Tests\**" />
+  </ItemGroup>
+
 </Project>
