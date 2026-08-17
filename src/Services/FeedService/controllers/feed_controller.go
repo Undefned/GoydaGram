@@ -1,9 +1,12 @@
 package controllers
 
 import (
+	"context"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,13 +26,27 @@ func NewFeedController(feedService *services.FeedService, prefetchService *servi
 	}
 }
 
+// resolveUserID extracts the authenticated user ID injected by the JWT middleware.
+// The ?user_id= query fallback is a local-dev convenience ONLY — it never runs outside
+// ENV=development, so it can't be used to read another user's feed in staging/prod.
+func resolveUserID(ctx *gin.Context) string {
+	if userID := ctx.GetString("user_id"); userID != "" {
+		return userID
+	}
+
+	if os.Getenv("ENV") == "development" {
+		return ctx.Query("user_id")
+	}
+
+	return ""
+}
+
 // GetFeed godoc
 // @Summary Get user feed
 // @Description Get personalized feed for a user with pagination
 // @Tags feed
 // @Accept json
 // @Produce json
-// @Param user_id query string false "User ID (from JWT if not provided)"
 // @Param offset query int false "Pagination offset" default(0)
 // @Param limit query int false "Items per page" default(30) maximum(50)
 // @Param seen query string false "Comma-separated list of seen video IDs"
@@ -39,15 +56,10 @@ func NewFeedController(feedService *services.FeedService, prefetchService *servi
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /feed [get]
 func (c *FeedController) GetFeed(ctx *gin.Context) {
-	// Get user ID from JWT (passed by gateway)
-	userID := ctx.GetString("user_id")
+	userID := resolveUserID(ctx)
 	if userID == "" {
-		// Fallback to query param (for testing)
-		userID = ctx.Query("user_id")
-		if userID == "" {
-			utils.Error(ctx, http.StatusUnauthorized, "User ID required")
-			return
-		}
+		utils.Error(ctx, http.StatusUnauthorized, "User ID required")
+		return
 	}
 
 	// Parse query params
@@ -65,9 +77,14 @@ func (c *FeedController) GetFeed(ctx *gin.Context) {
 
 	// Check if this is a prefetch request
 	if prefetch := ctx.Query("prefetch"); prefetch == "true" {
-		// Start prefetch in background and return immediately
+		// Fire-and-forget prefetch must NOT reuse ctx.Request.Context() — that context
+		// gets cancelled as soon as we write the response below, which would kill every
+		// downstream call the background goroutine makes. Use a detached context with
+		// its own timeout instead.
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		go func() {
-			_, _ = c.feedService.GetFeed(ctx.Request.Context(), userID, offset, limit, seen)
+			defer cancel()
+			_, _ = c.feedService.GetFeed(bgCtx, userID, offset, limit, seen)
 		}()
 		utils.Success(ctx, gin.H{"message": "Prefetch started"})
 		return
@@ -114,7 +131,6 @@ func (c *FeedController) GetTrending(ctx *gin.Context) {
 // @Tags feed
 // @Accept json
 // @Produce json
-// @Param user_id query string false "User ID (from JWT if not provided)"
 // @Param offset query int false "Pagination offset" default(0)
 // @Param seen query string false "Comma-separated list of seen video IDs"
 // @Success 200 {object} map[string]interface{} "Prefetched feed data"
@@ -123,13 +139,10 @@ func (c *FeedController) GetTrending(ctx *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /feed/prefetch [get]
 func (c *FeedController) Prefetch(ctx *gin.Context) {
-	userID := ctx.GetString("user_id")
+	userID := resolveUserID(ctx)
 	if userID == "" {
-		userID = ctx.Query("user_id")
-		if userID == "" {
-			utils.Error(ctx, http.StatusUnauthorized, "User ID required")
-			return
-		}
+		utils.Error(ctx, http.StatusUnauthorized, "User ID required")
+		return
 	}
 
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))

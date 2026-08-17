@@ -10,6 +10,11 @@ import (
 	"feed-service/models"
 )
 
+// Верхняя граница на размер trending-пула, который мы вытягиваем за один раз,
+// чтобы эмулировать пагинацию поверх content-service, у которого GetTrending
+// сам по себе не принимает offset. Не имеет смысла тянуть больше этого за раз.
+const maxTrendingPoolSize = 200
+
 type FeedService struct {
 	userClient    *clients.UserClient
 	contentClient *clients.ContentClient
@@ -39,6 +44,11 @@ func (s *FeedService) GetFeed(ctx context.Context, userID string, offset, limit 
 
 	if limit == 0 {
 		limit = s.batchSize
+	}
+
+	seenMap := make(map[string]bool, len(seen))
+	for _, id := range seen {
+		seenMap[id] = true
 	}
 
 	// Get user's interests and subscriptions in parallel
@@ -92,105 +102,143 @@ func (s *FeedService) GetFeed(ctx context.Context, userID string, offset, limit 
 		}
 	}
 
-	// Merge and deduplicate
+	// Merge and deduplicate, applying the seen-filter up front so it's never skipped
+	// by a later fallback branch.
 	allIDs := make(map[string]bool)
-	var mergedIDs []string
-
-	// Add recommended first (prioritize recommendations)
-	for _, id := range recommendedIDs {
-		if !allIDs[id] {
-			allIDs[id] = true
-			mergedIDs = append(mergedIDs, id)
-		}
-	}
-
-	// Add subscription videos
-	for _, id := range subscriptionVideoIDs {
-		if !allIDs[id] {
-			allIDs[id] = true
-			mergedIDs = append(mergedIDs, id)
-		}
-	}
-
-	// Filter out seen videos
-	seenMap := make(map[string]bool)
-	for _, s := range seen {
-		seenMap[s] = true
-	}
-
 	var filteredIDs []string
-	for _, id := range mergedIDs {
-		if !seenMap[id] {
-			filteredIDs = append(filteredIDs, id)
+
+	appendIfNew := func(id string) {
+		if allIDs[id] || seenMap[id] {
+			return
 		}
+		allIDs[id] = true
+		filteredIDs = append(filteredIDs, id)
 	}
 
-	// Apply pagination
+	for _, id := range recommendedIDs { // recommendations first (prioritized)
+		appendIfNew(id)
+	}
+	for _, id := range subscriptionVideoIDs {
+		appendIfNew(id)
+	}
+
+	// If there's no personalized signal at all for this page range, go straight to the
+	// trending path — this is the common case for brand-new users and must NOT report
+	// hasMore/nextOffset based on an unrelated (empty) filteredIDs slice.
+	if len(filteredIDs) <= offset {
+		return s.buildTrendingResponse(ctx, offset, limit, seenMap)
+	}
+
+	// Apply pagination over the personalized set
 	start := offset
 	end := offset + limit
-	if start > len(filteredIDs) {
-		start = len(filteredIDs)
-	}
 	if end > len(filteredIDs) {
 		end = len(filteredIDs)
 	}
-
 	pagedIDs := filteredIDs[start:end]
 
-	// Get video metadata
-	var videos []models.Video
-	if len(pagedIDs) > 0 {
-		var err error
-		videos, err = s.contentClient.GetVideoBatch(pagedIDs)
+	videos, err := s.contentClient.GetVideoBatch(pagedIDs)
+	if err != nil || len(videos) == 0 {
 		if err != nil {
-			log.Printf("Failed to get video metadata: %v", err)
-			// Fallback to trending
-			trending, err := s.contentClient.GetTrending(limit)
-			if err == nil {
-				videos = trending
-			}
+			log.Printf("Failed to get video metadata, falling back to trending: %v", err)
 		}
+		// Fall back to a properly paginated trending response instead of returning
+		// trending videos alongside pagination fields computed from filteredIDs.
+		return s.buildTrendingResponse(ctx, offset, limit, seenMap)
 	}
 
-	// If no videos, return trending
-	if len(videos) == 0 {
-		log.Printf("No videos found for user %s, falling back to trending", userID)
-		trending, err := s.contentClient.GetTrending(limit)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get trending videos: %w", err)
-		}
-		videos = trending
-	}
-
-	// Get user details for each video
-	userMap := make(map[string]*models.User)
-	for _, v := range videos {
-		if _, ok := userMap[v.UserID]; !ok {
-			user, err := s.userClient.GetUser(v.UserID)
-			if err == nil && user != nil {
-				userMap[v.UserID] = user
-			}
-		}
-	}
-
-	// Enrich videos with user data
-	enrichedVideos := make([]models.Video, len(videos))
-	for i, v := range videos {
-		enrichedVideos[i] = v
-		if user, ok := userMap[v.UserID]; ok {
-			enrichedVideos[i].User = user
-		}
-	}
+	enrichedVideos := s.enrichWithAuthors(videos)
 
 	hasMore := end < len(filteredIDs)
-	nextOffset := end
 
 	return &models.FeedResponse{
 		Videos:     enrichedVideos,
-		NextOffset: nextOffset,
+		NextOffset: end,
 		HasMore:    hasMore,
 		TotalCount: len(filteredIDs),
 	}, nil
+}
+
+// buildTrendingResponse emulates pagination over content-service's trending endpoint,
+// which itself only accepts a limit (no offset). We pull a bounded pool starting from 0,
+// slice it locally to the requested window, filter out already-seen videos, and derive
+// hasMore/nextOffset from that same pool — so the pagination contract stays honest even
+// when nothing personalized is available.
+func (s *FeedService) buildTrendingResponse(ctx context.Context, offset, limit int, seenMap map[string]bool) (*models.FeedResponse, error) {
+	poolSize := offset + limit + 1 // +1 so we can tell whether there's a next page
+	if poolSize > maxTrendingPoolSize {
+		poolSize = maxTrendingPoolSize
+	}
+
+	pool, err := s.contentClient.GetTrending(poolSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trending videos: %w", err)
+	}
+
+	filtered := make([]models.Video, 0, len(pool))
+	for _, v := range pool {
+		if !seenMap[v.ID] {
+			filtered = append(filtered, v)
+		}
+	}
+
+	start := offset
+	if start > len(filtered) {
+		start = len(filtered)
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	page := filtered[start:end]
+	enrichedVideos := s.enrichWithAuthors(page)
+
+	return &models.FeedResponse{
+		Videos:     enrichedVideos,
+		NextOffset: end,
+		HasMore:    end < len(filtered) && len(pool) >= poolSize, // more only if the pool wasn't already exhausted
+		TotalCount: len(filtered),
+	}, nil
+}
+
+// enrichWithAuthors fetches author metadata for each unique video author concurrently
+// instead of sequentially — a feed page with N distinct authors previously meant N
+// blocking round-trips to user-service in series.
+func (s *FeedService) enrichWithAuthors(videos []models.Video) []models.Video {
+	uniqueAuthorIDs := make(map[string]struct{})
+	for _, v := range videos {
+		uniqueAuthorIDs[v.UserID] = struct{}{}
+	}
+
+	userMap := make(map[string]*models.User, len(uniqueAuthorIDs))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for authorID := range uniqueAuthorIDs {
+		authorID := authorID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			user, err := s.userClient.GetUser(authorID)
+			if err != nil || user == nil {
+				return
+			}
+			mu.Lock()
+			userMap[authorID] = user
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	enriched := make([]models.Video, len(videos))
+	for i, v := range videos {
+		enriched[i] = v
+		if user, ok := userMap[v.UserID]; ok {
+			enriched[i].User = user
+		}
+	}
+	return enriched
 }
 
 func (s *FeedService) GetTrending(ctx context.Context, limit int) ([]models.Video, error) {
