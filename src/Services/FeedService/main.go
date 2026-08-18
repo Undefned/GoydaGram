@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"feed-service/clients"
 	"feed-service/config"
@@ -91,6 +92,7 @@ func main() {
 
 	// Swagger endpoint
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Routes
 	feedCtrl := controllers.NewFeedController(feedService, prefetchService)

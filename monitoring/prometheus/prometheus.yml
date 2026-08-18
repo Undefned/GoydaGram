@@ -1,0 +1,96 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'goydagram'
+    environment: 'production'
+
+scrape_configs:
+  # Сервисы
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'content-service'
+    static_configs:
+      - targets: ['content-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'social-service'
+    static_configs:
+      - targets: ['social-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'feed-service'
+    static_configs:
+      - targets: ['feed-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'search-service'
+    static_configs:
+      - targets: ['search-service:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Инфраструктура
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'user-db'
+    static_configs:
+      - targets: ['postgres-exporter-user:9187']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'content-db'
+    static_configs:
+      - targets: ['postgres-exporter-content:9188']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'social-db'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'search-db'
+    static_configs:
+      - targets: ['elasticsearch-exporter:9114']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'user-redis'
+    static_configs:
+      - targets: ['redis-exporter-user:9121']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'content-redis'
+    static_configs:
+      - targets: ['redis-exporter-content:9122']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'social-redis'
+    static_configs:
+      - targets: ['redis-exporter-social:9123']  # ✅ Исправлено
+    scrape_interval: 10s
+
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9000']
+    metrics_path: '/minio/v2/metrics/cluster'
+    scrape_interval: 10s
+    scheme: 'http'
+    basic_auth:
+      username: ${MINIO_USER}
+      password: ${MINIO_PASSWORD}
