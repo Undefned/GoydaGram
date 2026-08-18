@@ -8,4 +8,7 @@ pydantic-settings==2.4.0
 aiohttp==3.10.0
 httpx==0.27.0
 tenacity==8.5.0
-pytest
+pytest==9.1.1
+prometheus-client==0.26.0
+prometheus-fastapi-instrumentator==6.1.0
+werkzeug==3.0.3

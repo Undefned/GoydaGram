@@ -34,6 +34,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -56,6 +61,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -79,22 +89,31 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
   # ====================================================================
   # SHARED INFRASTRUCTURE
   # ====================================================================
+
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: goydagram-rabbitmq
     restart: unless-stopped
+    command: >
+      sh -c "rabbitmq-plugins enable --offline rabbitmq_prometheus && rabbitmq-server"
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
     ports:
-      - "127.0.0.1:5672:5672"   # AMQP
-      - "127.0.0.1:15672:15672" # Management UI
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+      - "127.0.0.1:15692:15692"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -103,6 +122,11 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -118,6 +142,11 @@ services:
     depends_on:
       user-db:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -159,6 +188,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -181,6 +215,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -203,6 +242,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -226,6 +270,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -262,6 +311,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -282,6 +336,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -305,6 +364,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -341,6 +405,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - goydagram-network
 
@@ -410,6 +479,140 @@ services:
       - goydagram-network
 
   # ====================================================================
+  # EXPORTERS
+  # ====================================================================
+  postgres-exporter-user:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: goydagram-postgres-exporter-user
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${USER_DB_USER}:${USER_DB_PASSWORD}@user-db:5432/${USER_DB_NAME:-userdb}?sslmode=disable
+    ports:
+      - "127.0.0.1:9187:9187"
+    depends_on:
+      - user-db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  postgres-exporter-content:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: goydagram-postgres-exporter-content
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${CONTENT_DB_USER}:${CONTENT_DB_PASSWORD}@content-db:5432/${CONTENT_DB_NAME:-contentdb}?sslmode=disable
+    ports:
+      - "127.0.0.1:9188:9187"
+    depends_on:
+      - content-db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  mongodb-exporter:
+    image: bitnami/mongodb-exporter:latest
+    container_name: goydagram-mongodb-exporter
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@social-db:27017/admin
+    ports:
+      - "127.0.0.1:9216:9216"
+    depends_on:
+      - social-db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  elasticsearch-exporter:
+    image: quay.io/prometheuscommunity/elasticsearch-exporter:latest
+    container_name: goydagram-elasticsearch-exporter
+    restart: unless-stopped
+    command:
+      - '--es.uri=http://search-db:9200'
+      - '--es.all'
+      - '--es.indices'
+    ports:
+      - "127.0.0.1:9114:9114"
+    depends_on:
+      - search-db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  redis-exporter-user:
+    image: oliver006/redis_exporter:latest
+    container_name: goydagram-redis-exporter-user
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://user-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:9121:9121"
+    depends_on:
+      - user-redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  redis-exporter-content:
+    image: oliver006/redis_exporter:latest
+    container_name: goydagram-redis-exporter-content
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://content-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:9122:9121"
+    depends_on:
+      - content-redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  redis-exporter-social:
+    image: oliver006/redis_exporter:latest
+    container_name: goydagram-redis-exporter-social
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://social-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:9123:9121"
+    depends_on:
+      - social-redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  # ====================================================================
   # API GATEWAY
   # ====================================================================
   api-gateway:
@@ -424,7 +627,6 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ISSUER=${JWT_ISSUER}
       - JWT_AUDIENCE=${JWT_AUDIENCE}
-
       - USER_SERVICE_URL=http://user-service:8080
       - CONTENT_SERVICE_URL=http://content-service:8080
       - SOCIAL_SERVICE_URL=http://social-service:8080
@@ -457,6 +659,90 @@ services:
     networks:
       - goydagram-network
 
+  # ====================================================================
+  # OBSERVABILITY STACK
+  # ====================================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: goydagram-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+    depends_on:
+      - user-service
+      - content-service
+      - social-service
+      - feed-service
+      - search-service
+    networks:
+      - goydagram-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: goydagram-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - goydagram-network
+
+  loki:
+    image: grafana/loki:latest
+    container_name: goydagram-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - goydagram-network
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: goydagram-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - goydagram-network
+
 # ====================================================================
 volumes:
   user_db_data:
@@ -476,6 +762,12 @@ volumes:
   social_redis_data:
     driver: local
   search_db_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  loki_data:
     driver: local
 
 networks:
