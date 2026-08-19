@@ -28,6 +28,8 @@ public class Video
     public int CommentsCount { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
+    public DateTime? BlockedAt { get; private set; }
+    public string? BlockReason { get; private set; }
 
     private readonly List<Tag> _tags = new();
     public IReadOnlyCollection<Tag> Tags => _tags.AsReadOnly();
@@ -47,9 +49,27 @@ public class Video
             Url = url,
             Status = VideoStatus.Processing,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
         };
     }
+
+    public void Block(string reason)
+    {
+        Status = VideoStatus.Blocked;
+        BlockedAt = DateTime.UtcNow;
+        BlockReason = reason;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Unblock()
+    {
+        Status = VideoStatus.Ready;
+        BlockedAt = null;
+        BlockReason = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public bool IsBlocked() => Status == VideoStatus.Blocked;
 
     public void MarkAsReady(string previewUrl)
     {

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ContentService.Domain.Entities;
 using ContentService.Domain.Interfaces;
+using ContentService.Domain.Enums;
 
 namespace ContentService.Infrastructure.Persistence;
 
@@ -97,5 +98,24 @@ public class VideoRepository : IVideoRepository
             .Take(limit)
             .Include(v => v.Tags)
             .ToListAsync();
+    }
+
+    public async Task<(List<Video> Videos, int Total)> GetAllForAdminAsync(int limit, int offset, VideoStatus? statusFilter = null)
+    {
+        var query = _context.Videos
+            .Include(v => v.Tags)
+            .AsQueryable();
+
+        if (statusFilter.HasValue)
+            query = query.Where(v => v.Status == statusFilter.Value);
+
+        var total = await query.CountAsync();
+        var videos = await query
+            .OrderByDescending(v => v.CreatedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync();
+
+        return (videos, total);
     }
 }
