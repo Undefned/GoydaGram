@@ -32,6 +32,16 @@ public class UsersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe()
+    {
+        var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        _logger.LogInformation("Get current user {UserId}", userId);
+        var query = new GetUserQuery(userId);
+        var result = await _mediator.Send(query);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}/subscriptions")]
     public async Task<IActionResult> GetSubscriptions(Guid id)
     {

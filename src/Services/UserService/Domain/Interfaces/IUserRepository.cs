@@ -12,4 +12,6 @@ public interface IUserRepository : IRepository<User>
     Task<bool> SubscriptionExistsAsync(Guid followerId, Guid followeeId);
     Task AddSubscriptionAsync(Guid followerId, Guid followeeId);
     Task<bool> RemoveSubscriptionAsync(Guid followerId, Guid followeeId);
+    Task<(List<User> Users, int Total)> GetAllAsync(int limit, int offset);
+    Task<List<User>> SearchAsync(string query, int limit);
 }

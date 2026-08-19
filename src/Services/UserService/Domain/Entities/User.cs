@@ -16,10 +16,11 @@ public class User
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
     public DateTime? DeletedAt { get; private set; }
+    public string Role { get; private set; } = "User";
 
     private User() { }
 
-    public static User Create(string username, string email, string passwordHash)
+    public static User Create(string username, string email, string passwordHash, string role = "User")
     {
         return new User
         {
@@ -31,7 +32,8 @@ public class User
             FollowersCount = 0,
             FollowingCount = 0,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            Role = role
         };
     }
 
@@ -72,4 +74,7 @@ public class User
     public void Verify() => IsVerified = true;
     public void SoftDelete() => DeletedAt = DateTime.UtcNow;
     public bool IsActive() => DeletedAt == null;
+    public void PromoteToAdmin() => Role = "Admin";
+    public void DemoteToUser() => Role = "User";
+    public bool IsAdmin() => Role == "Admin";
 }

@@ -162,6 +162,35 @@ public class UserRepository : IUserRepository
         }
     }
 
+    public async Task<(List<User> Users, int Total)> GetAllAsync(int limit, int offset)
+    {
+        var query = _context.Users
+            .Where(u => u.DeletedAt == null)
+            .OrderBy(u => u.CreatedAt);
+
+        var total = await query.CountAsync();
+        var users = await query
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync();
+
+        return (users, total);
+    }
+
+    public async Task<List<User>> SearchAsync(string query, int limit)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<User>();
+
+        return await _context.Users
+            .Where(u => u.DeletedAt == null &&
+                (u.Username.Contains(query) ||
+                u.Email.Contains(query)))
+            .OrderBy(u => u.Username)
+            .Take(limit)
+            .ToListAsync();
+    }
+
     private async Task InvalidateSubscriptionCacheAsync(Guid followerId, Guid followeeId)
     {
         await _cache.RemoveAsync(string.Format(SUBSCRIPTIONS_CACHE_KEY, followerId));
