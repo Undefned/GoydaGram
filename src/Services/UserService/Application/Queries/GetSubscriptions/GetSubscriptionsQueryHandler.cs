@@ -26,7 +26,8 @@ public class GetSubscriptionsQueryHandler(
             u.IsVerified,
             u.FollowersCount,
             u.FollowingCount,
-            u.CreatedAt
+            u.CreatedAt,
+            u.Role
         )).ToList();
     }
 }

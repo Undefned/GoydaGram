@@ -24,7 +24,8 @@ public class GetUserQueryHandler(
             user.IsVerified,
             user.FollowersCount,
             user.FollowingCount,
-            user.CreatedAt
+            user.CreatedAt,
+            user.Role
         );
     }
 }

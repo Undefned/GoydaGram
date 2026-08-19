@@ -9,5 +9,6 @@ public record UserDto(
     bool IsVerified,
     int FollowersCount,
     int FollowingCount,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string Role
 );
