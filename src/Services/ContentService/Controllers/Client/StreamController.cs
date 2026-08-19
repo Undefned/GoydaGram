@@ -24,9 +24,22 @@ public class StreamController : ControllerBase
             var stream = await _storageService.DownloadFileAsync(path);
             var contentType = ResolveContentType(path);
 
-            // enableRangeProcessing: true — без этого браузер/плеер не может перематывать
-            // видео (запросы с заголовком Range игнорировались бы, весь файл гнался с начала).
             return File(stream, contentType, enableRangeProcessing: true);
+        }
+        catch
+        {
+            return NotFound();
+        }
+    }
+
+    [HttpGet("preview/{**path}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Preview(string path)
+    {
+        try
+        {
+            var stream = await _storageService.DownloadFileAsync($"previews/{path}");
+            return File(stream, "image/jpeg");
         }
         catch
         {
