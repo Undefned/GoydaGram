@@ -176,10 +176,10 @@ cd src/Services/SearchService && pytest tests/
 
 ## 👥 Team
 
-- **Architect**: Undefned & DocUp
-- **Backend**: Undefned
-- **Frontend**: soniksx & Undefned
-- **DevOps**: Undefned
+- **Architect**: [Undefned](https://github.com/Undefned) & [DocUp](https://github.com/DocUp1)
+- **Backend**: [Undefned](https://github.com/Undefned)
+- **Frontend**: [soniksx](https://github.com/soniksx) & [Undefned](https://github.com/Undefned)
+- **DevOps**: [Undefned](https://github.com/Undefned)
 
 ---
 
