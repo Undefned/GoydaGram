@@ -743,6 +743,22 @@ services:
     networks:
       - goydagram-network
 
+  frontend:
+    build:
+      context: ./src/goydagram-frontend
+      dockerfile: Dockerfile
+    container_name: goydagram-frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./src/goydagram-frontend:/app
+      - /app/node_modules
+    networks:
+      - goydagram-network
+      
 # ====================================================================
 volumes:
   user_db_data:
