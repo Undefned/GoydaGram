@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ContentService.Domain.Interfaces;
@@ -18,13 +19,15 @@ public class RabbitMQConsumer : BackgroundService
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-        // connection._connection было private — не компилировалось. Используем публичное свойство.
         _connection = connection.Connection;
         _channel = _connection.CreateModel();
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Starting RabbitMQ consumers...");
+        
+        // Декларируем очереди
         _channel.QueueDeclare("content.social.likes", durable: true, exclusive: false, autoDelete: false);
         _channel.QueueDeclare("content.social.views", durable: true, exclusive: false, autoDelete: false);
         _channel.QueueDeclare("content.social.comments", durable: true, exclusive: false, autoDelete: false);
@@ -33,23 +36,32 @@ public class RabbitMQConsumer : BackgroundService
         _channel.QueueBind("content.social.views", "social.events", "social.viewed");
         _channel.QueueBind("content.social.comments", "social.events", "social.commented");
 
+        // Запускаем consumers
         ConsumeQueue("content.social.likes", ProcessLikeEvent);
         ConsumeQueue("content.social.views", ProcessViewEvent);
         ConsumeQueue("content.social.comments", ProcessCommentEvent);
-
-        return Task.CompletedTask;
+        
+        _logger.LogInformation("All RabbitMQ consumers started");
+        
+        // Держим сервис живым
+        await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
     private void ConsumeQueue(string queueName, Func<string, Task> processor)
     {
         var consumer = new AsyncEventingBasicConsumer(_channel);
+        
         consumer.Received += async (model, ea) =>
         {
             try
             {
                 var body = Encoding.UTF8.GetString(ea.Body.ToArray());
+                _logger.LogInformation("Received message from {QueueName}: {Message}", queueName, body);
+                
                 await processor(body);
                 _channel.BasicAck(ea.DeliveryTag, false);
+                
+                _logger.LogInformation("Message processed successfully from {QueueName}", queueName);
             }
             catch (Exception ex)
             {
@@ -62,64 +74,121 @@ public class RabbitMQConsumer : BackgroundService
         _logger.LogInformation("Started consuming from {QueueName}", queueName);
     }
 
-    private async Task ProcessLikeEvent(string message)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IVideoRepository>();
-        var cache = scope.ServiceProvider.GetRequiredService<ICacheService>();
-
-        var evt = JsonSerializer.Deserialize<SocialEvent>(message);
-        if (evt == null) return;
-
-        var video = await repository.GetByIdAsync(evt.VideoId);
-        if (video == null) return;
-
-        video.IncrementLikes();
-        await repository.UpdateAsync(video);
-        await repository.UnitOfWork.SaveChangesAsync();
-
-        await cache.RemoveAsync($"video:{evt.VideoId}");
-        await cache.RemoveAsync("trending:videos");
-    }
-
     private async Task ProcessViewEvent(string message)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IVideoRepository>();
-        var cache = scope.ServiceProvider.GetRequiredService<ICacheService>();
+        try
+        {
+            _logger.LogInformation("Processing view event: {Message}", message);
+            
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IVideoRepository>();
+            var cache = scope.ServiceProvider.GetRequiredService<ICacheService>();
 
-        var evt = JsonSerializer.Deserialize<SocialEvent>(message);
-        if (evt == null) return;
+            // ✅ Правильная десериализация
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            
+            var evt = JsonSerializer.Deserialize<SocialEvent>(message, options);
+            
+            if (evt == null)
+            {
+                _logger.LogWarning("Failed to deserialize view event: {Message}", message);
+                return;
+            }
 
-        var video = await repository.GetByIdAsync(evt.VideoId);
-        if (video == null) return;
+            _logger.LogInformation("Looking for video: {VideoId}", evt.VideoId);
 
-        video.IncrementViews();
-        await repository.UpdateAsync(video);
-        await repository.UnitOfWork.SaveChangesAsync();
+            var video = await repository.GetByIdAsync(evt.VideoId);
+            if (video == null)
+            {
+                _logger.LogWarning("Video {VideoId} not found", evt.VideoId);
+                return;
+            }
 
-        await cache.RemoveAsync($"video:{evt.VideoId}");
-        await cache.RemoveAsync("trending:videos");
+            // ✅ Увеличиваем счетчик просмотров
+            video.IncrementViews();
+            await repository.UpdateAsync(video);
+            await repository.UnitOfWork.SaveChangesAsync();
+
+            // Инвалидируем кеш
+            await cache.RemoveAsync($"video:{evt.VideoId}");
+            await cache.RemoveAsync("trending:videos");
+
+            _logger.LogInformation("Video {VideoId} views updated to {ViewsCount}", evt.VideoId, video.ViewsCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process view event");
+            throw;
+        }
+    }
+
+    private async Task ProcessLikeEvent(string message)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IVideoRepository>();
+            var cache = scope.ServiceProvider.GetRequiredService<ICacheService>();
+
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            
+            var evt = JsonSerializer.Deserialize<SocialEvent>(message, options);
+            if (evt == null) return;
+
+            var video = await repository.GetByIdAsync(evt.VideoId);
+            if (video == null) return;
+
+            video.IncrementLikes();
+            await repository.UpdateAsync(video);
+            await repository.UnitOfWork.SaveChangesAsync();
+
+            await cache.RemoveAsync($"video:{evt.VideoId}");
+            await cache.RemoveAsync("trending:videos");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process like event");
+            throw;
+        }
     }
 
     private async Task ProcessCommentEvent(string message)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IVideoRepository>();
-        var cache = scope.ServiceProvider.GetRequiredService<ICacheService>();
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IVideoRepository>();
+            var cache = scope.ServiceProvider.GetRequiredService<ICacheService>();
 
-        var evt = JsonSerializer.Deserialize<SocialEvent>(message);
-        if (evt == null) return;
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            
+            var evt = JsonSerializer.Deserialize<SocialEvent>(message, options);
+            if (evt == null) return;
 
-        var video = await repository.GetByIdAsync(evt.VideoId);
-        if (video == null) return;
+            var video = await repository.GetByIdAsync(evt.VideoId);
+            if (video == null) return;
 
-        video.IncrementComments();
-        await repository.UpdateAsync(video);
-        await repository.UnitOfWork.SaveChangesAsync();
+            video.IncrementComments();
+            await repository.UpdateAsync(video);
+            await repository.UnitOfWork.SaveChangesAsync();
 
-        await cache.RemoveAsync($"video:{evt.VideoId}");
-        await cache.RemoveAsync("trending:videos");
+            await cache.RemoveAsync($"video:{evt.VideoId}");
+            await cache.RemoveAsync("trending:videos");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process comment event");
+            throw;
+        }
     }
 
     public override void Dispose()
@@ -128,10 +197,19 @@ public class RabbitMQConsumer : BackgroundService
         base.Dispose();
     }
 
+    // ✅ ИСПРАВЛЕННЫЙ КЛАСС С АТРИБУТАМИ
     private class SocialEvent
     {
+        [JsonPropertyName("video_id")]
         public Guid VideoId { get; set; }
+        
+        [JsonPropertyName("user_id")]
         public Guid UserId { get; set; }
+        
+        [JsonPropertyName("timestamp")]
         public DateTime Timestamp { get; set; }
+        
+        [JsonPropertyName("type")]
+        public string Type { get; set; }
     }
 }

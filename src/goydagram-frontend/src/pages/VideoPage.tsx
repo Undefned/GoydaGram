@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteVideo, getVideo, resolveMediaUrl } from "@/api/videos";
-import { getSubscriptions, getUser, subscribe, unsubscribe } from "@/api/users";
+import { deleteVideo, getVideo, resolveMediaUrl, getHlsUrl } from "@/api/videos";
+import { getSubscriptions, getUser, subscribe, unsubscribe, refreshUserInterests } from "@/api/users";
 import { getVideoLikesCount, likeVideo, recordView, unlikeVideo } from "@/api/social";
 import { HlsPlayer } from "@/components/HlsPlayer";
 import { CommentSection } from "@/components/CommentSection";
+import { EditVideoModal } from "@/components/EditVideoModal";
 import { Avatar } from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +23,7 @@ export function VideoPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [liked, setLiked] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const hasRecordedView = useRef(false);
 
   const videoQuery = useQuery({
@@ -40,6 +42,7 @@ export function VideoPage() {
     queryKey: ["video-likes", id],
     queryFn: () => getVideoLikesCount(id!),
     enabled: Boolean(id),
+    placeholderData: 0,
   });
 
   const likeMutation = useMutation({
@@ -50,6 +53,10 @@ export function VideoPage() {
     onSuccess: () => {
       setLiked((prev) => !prev);
       queryClient.invalidateQueries({ queryKey: ["video-likes", id] });
+      // Обновляем интересы после лайка (fire-and-forget)
+      if (!liked && user) {
+        refreshUserInterests(user.id).catch(() => {});
+      }
     },
   });
 
@@ -79,9 +86,7 @@ export function VideoPage() {
   const handlePlay = () => {
     if (!hasRecordedView.current && user && id) {
       hasRecordedView.current = true;
-      recordView(id, user.id).catch(() => {
-        hasRecordedView.current = false;
-      });
+      recordView(id, user.id);
     }
   };
 
@@ -90,6 +95,7 @@ export function VideoPage() {
   }, [id]);
 
   const video = videoQuery.data;
+  const likesCount = likesQuery.data ?? video?.likesCount ?? 0;
 
   if (videoQuery.isLoading) {
     return <p className="text-sm text-ink-400">Loading video…</p>;
@@ -105,7 +111,7 @@ export function VideoPage() {
     <div className="mx-auto max-w-4xl">
       <div className="aspect-video">
         <HlsPlayer
-          src={resolveMediaUrl(video.hlsManifestUrl, "stream")}
+          src={getHlsUrl(video.hlsManifestUrl) || resolveMediaUrl(video.originalUrl, "stream")}
           poster={video.previewUrl ? resolveMediaUrl(video.previewUrl, "preview") : undefined}
           onPlay={handlePlay}
         />
@@ -132,7 +138,7 @@ export function VideoPage() {
               liked ? "border-flare-500 text-flare-500" : "border-ink-700 text-ink-200 hover:border-flare-500 hover:text-flare-500"
             }`}
           >
-            {liked ? "Liked" : "Like"} · {formatCount(likesQuery.data ?? video.likesCount)}
+            {liked ? "Liked" : "Like"} · {formatCount(likesCount)}
           </button>
 
           {user && !isOwner && (
@@ -150,14 +156,22 @@ export function VideoPage() {
           )}
 
           {isOwner && (
-            <button
-              onClick={() => {
-                if (confirm("Delete this video?")) deleteMutation.mutate();
-              }}
-              className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-400 hover:border-flare-500 hover:text-flare-400 transition-colors"
-            >
-              Delete
-            </button>
+            <>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-200 hover:border-mint-400 hover:text-mint-400 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm("Delete this video?")) deleteMutation.mutate();
+                }}
+                className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-400 hover:border-flare-500 hover:text-flare-400 transition-colors"
+              >
+                Delete
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -185,6 +199,8 @@ export function VideoPage() {
       <div className="mt-8 border-t border-ink-800 pt-6">
         <CommentSection videoId={video.id} />
       </div>
+
+      {isEditing && <EditVideoModal video={video} onClose={() => setIsEditing(false)} />}
     </div>
   );
 }

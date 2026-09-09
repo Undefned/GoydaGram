@@ -98,6 +98,7 @@ func main() {
 	feedCtrl := controllers.NewFeedController(feedService, prefetchService)
 
 	api := r.Group("/api")
+	api.Use(middleware.AuthMiddleware(cfg.JwtSecret))
 	{
 		api.GET("/feed", feedCtrl.GetFeed)
 		api.GET("/feed/trending", feedCtrl.GetTrending)

@@ -19,9 +19,10 @@ export function CommentSection({ videoId }: { videoId: string }) {
   const [text, setText] = useState("");
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["comments", videoId],
     queryFn: () => getVideoComments(videoId, 50, 0),
+    placeholderData: { data: [], total: 0, limit: 50, offset: 0 },
   });
 
   const addMutation = useMutation({
@@ -37,7 +38,9 @@ export function CommentSection({ videoId }: { videoId: string }) {
 
   const deleteMutation = useMutation({
     mutationFn: (commentId: string) => deleteComment(commentId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comments", videoId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comments", videoId] });
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,10 +48,13 @@ export function CommentSection({ videoId }: { videoId: string }) {
     if (text.trim()) addMutation.mutate();
   };
 
+  const comments = Array.isArray(data?.data) ? data.data : [];
+  const total = data?.total ?? 0;
+
   return (
     <div>
       <h2 className="font-display text-base font-semibold mb-4">
-        Comments {data ? `(${data.total})` : ""}
+        Comments {total > 0 ? `(${total})` : ""}
       </h2>
 
       {user ? (
@@ -80,8 +86,12 @@ export function CommentSection({ videoId }: { videoId: string }) {
 
       {isLoading && <p className="text-sm text-ink-400">Loading comments…</p>}
 
+      {error && (
+        <p className="text-sm text-flare-400">Failed to load comments: {String(error)}</p>
+      )}
+
       <ul className="space-y-4">
-        {data?.data.map((comment) => (
+        {comments.map((comment) => (
           <li key={comment.id} className="flex gap-3">
             <Avatar url={null} name={comment.user_id} size="h-8 w-8" />
             <div className="flex-1">
@@ -102,7 +112,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
         ))}
       </ul>
 
-      {data && data.data.length === 0 && (
+      {!isLoading && comments.length === 0 && (
         <p className="text-sm text-ink-400">No comments yet — be the first.</p>
       )}
     </div>

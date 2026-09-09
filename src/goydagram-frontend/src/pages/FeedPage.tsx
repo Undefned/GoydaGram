@@ -1,99 +1,231 @@
-import { useMemo, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { getFeed } from "@/api/feed";
-import { getVideosBatch } from "@/api/videos";
-import { useQuery } from "@tanstack/react-query";
-import { VideoGrid, VideoGridSkeleton } from "@/components/VideoGrid";
-import { useAuth } from "@/context/AuthContext";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import type { FeedItem } from "@/types";
+import { getFeed, getFeedTrending } from "@/api/feed";
+import { getUserVideos, getMyVideos } from "@/api/videos";
+import { getSubscriptions } from "@/api/users";
+import { ReelCard } from "@/components/ReelCard";
+import { CommentsDrawer } from "@/components/CommentsDrawer";
+import { useAuth } from "@/context/AuthContext";
+import type { FeedVideo } from "@/types";
 
-const PAGE_SIZE = 30;
+type Tab = "for-you" | "following" | "popular" | "my";
 
-function extractVideoIds(items: FeedItem[]): string[] {
-  return items
-    .map((item) => (typeof item.video_id === "string" ? item.video_id : typeof item.id === "string" ? item.id : null))
-    .filter((id): id is string => Boolean(id));
-}
+const TABS: { id: Tab; label: string }[] = [
+  { id: "for-you", label: "For You" },
+  { id: "following", label: "Following" },
+  { id: "popular", label: "Popular" },
+  { id: "my", label: "My" },
+];
 
-export function FeedPage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const [seen, setSeen] = useState<string[]>([]);
+const PAGE_SIZE = 20;
 
-  const feedQuery = useInfiniteQuery({
-    queryKey: ["feed"],
-    queryFn: ({ pageParam = 0 }) => getFeed({ offset: pageParam, limit: PAGE_SIZE, seen }),
-    getNextPageParam: (lastPage, allPages) => {
-      const items = lastPage.items ?? lastPage.videos ?? [];
-      if (items.length < PAGE_SIZE) return undefined;
-      return allPages.length * PAGE_SIZE;
-    },
-    initialPageParam: 0,
-    enabled: Boolean(user),
-  });
+function ReelsColumn({
+  videos,
+  isLoading,
+  emptyMessage,
+  onOpenComments,
+  onReachEnd,
+}: {
+  videos: FeedVideo[];
+  isLoading: boolean;
+  emptyMessage: string;
+  onOpenComments: (id: string) => void;
+  onReachEnd?: () => void;
+}) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const videoIds = useMemo(() => {
-    const allItems = feedQuery.data?.pages.flatMap((p) => p.items ?? []) ?? [];
-    return extractVideoIds(allItems);
-  }, [feedQuery.data]);
+  useEffect(() => {
+    if (!onReachEnd) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) onReachEnd();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onReachEnd]);
 
-  // The feed service returns lightweight feed entries (video ids + ranking
-  // signals) — hydrate them into full VideoDto objects via ContentService's
-  // batch endpoint so the grid has titles/thumbnails/counts to render.
-  const videosQuery = useQuery({
-    queryKey: ["feed-videos", videoIds],
-    queryFn: () => getVideosBatch(videoIds),
-    enabled: videoIds.length > 0,
-  });
-
-  const inlineVideos = useMemo(() => {
-    const withVideos = feedQuery.data?.pages.flatMap((p) => p.videos ?? []) ?? [];
-    return withVideos.length > 0 ? withVideos : undefined;
-  }, [feedQuery.data]);
-
-  const videos = inlineVideos ?? videosQuery.data ?? [];
-
-  if (!authLoading && !user) {
+  if (isLoading) {
     return (
-      <div className="mx-auto max-w-md py-16 text-center">
-        <h1 className="font-display text-xl font-semibold">Log in for your feed</h1>
-        <p className="mt-2 text-sm text-ink-400">
-          GoydaGram personalizes your feed once you're signed in. In the meantime, check out{" "}
-          <Link to="/trending" className="text-mint-400 hover:underline">
-            what's trending
-          </Link>
-          .
-        </p>
+      <div className="flex h-[calc(100vh-7rem)] items-center justify-center md:h-[calc(100vh-7rem)]">
+        <p className="text-sm text-ink-400">Loading…</p>
+      </div>
+    );
+  }
+
+  if (videos.length === 0) {
+    return (
+      <div className="flex h-[calc(100vh-7rem)] items-center justify-center px-8 text-center md:h-[calc(100vh-7rem)]">
+        <p className="text-sm text-ink-400">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div>
-      <h1 className="font-display mb-6 text-xl font-semibold">Your feed</h1>
+    <div className="h-[calc(100vh-7rem)] snap-y snap-mandatory overflow-y-scroll no-scrollbar md:h-[calc(100vh-7rem)]">
+      {videos.map((video) => (
+        <ReelCard key={video.id} video={video} onOpenComments={onOpenComments} />
+      ))}
+      <div ref={sentinelRef} className="h-px" />
+    </div>
+  );
+}
 
-      {(feedQuery.isLoading || (videoIds.length > 0 && videosQuery.isLoading && !inlineVideos)) && (
-        <VideoGridSkeleton />
-      )}
+export function FeedPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const [tab, setTab] = useState<Tab>("for-you");
+  const [commentsVideoId, setCommentsVideoId] = useState<string | null>(null);
 
-      {!feedQuery.isLoading && (
-        <VideoGrid videos={videos} emptyMessage="Nothing in your feed yet — like a few videos to train it." />
-      )}
+  // ---- For You: personalized, paginated -----------------------------
+  const forYouQuery = useInfiniteQuery({
+    queryKey: ["feed", "for-you"],
+    queryFn: ({ pageParam = 0 }) => getFeed({ offset: pageParam, limit: PAGE_SIZE }),
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
+    initialPageParam: 0,
+    enabled: Boolean(user) && tab === "for-you",
+    retry: false,
+    placeholderData: (prev) => prev ?? { pages: [], pageParams: [] },
+  });
+  const forYouVideos = useMemo(
+    () => forYouQuery.data?.pages.flatMap((p) => p.videos) ?? [],
+    [forYouQuery.data]
+  );
 
-      {feedQuery.hasNextPage && (
-        <div className="mt-8 flex justify-center">
-          <button
-            onClick={() => {
-              setSeen((prev) => [...prev, ...videoIds]);
-              feedQuery.fetchNextPage();
-            }}
-            disabled={feedQuery.isFetchingNextPage}
-            className="rounded-full border border-ink-700 px-5 py-2 text-sm font-medium text-ink-200 hover:border-mint-400 hover:text-mint-400 transition-colors disabled:opacity-40"
-          >
-            {feedQuery.isFetchingNextPage ? "Loading…" : "Load more"}
-          </button>
+  // ---- Popular: FeedService's trending ------------------------------
+  const popularQuery = useQuery({
+    queryKey: ["feed", "popular"],
+    queryFn: () => getFeedTrending(PAGE_SIZE),
+    enabled: tab === "popular",
+    placeholderData: [],
+  });
+
+  // ---- Following: composed client-side ------------------------------
+  const subscriptionsQuery = useQuery({
+    queryKey: ["subscriptions", user?.id],
+    queryFn: () => getSubscriptions(user!.id),
+    enabled: Boolean(user) && tab === "following",
+    placeholderData: [],
+  });
+
+  const followingQuery = useQuery({
+    queryKey: ["feed", "following", subscriptionsQuery.data?.map((u) => u.id)],
+    queryFn: async () => {
+      const followees = subscriptionsQuery.data ?? [];
+      const perFollowee = await Promise.all(
+        followees.map(async (followee) => {
+          try {
+            const page = await getUserVideos(followee.id, 10, 0);
+            return page.data.map((v): FeedVideo => ({ ...v, user: { ...followee, email: "" } }));
+          } catch {
+            return [];
+          }
+        })
+      );
+      return perFollowee
+        .flat()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    },
+    enabled: Boolean(subscriptionsQuery.data) && tab === "following",
+    placeholderData: [],
+  });
+
+  // ---- My: own uploads ---------------------------------------------
+  const myQuery = useQuery({
+    queryKey: ["feed", "my"],
+    queryFn: () => getMyVideos(PAGE_SIZE, 0),
+    enabled: Boolean(user) && tab === "my",
+    placeholderData: { data: [], pagination: { limit: PAGE_SIZE, offset: 0, total: 0 } },
+  });
+  const myVideos = useMemo(
+    () => (myQuery.data?.data ?? []).map((v): FeedVideo => 
+      user ? { ...v, user: { ...user, email: user.email } } : v
+    ),
+    [myQuery.data, user]
+  );
+
+  if (!authLoading && !user && tab !== "popular") {
+    return (
+      <div className="relative -mx-4 -my-6 md:-mx-8">
+        <TabBar tab={tab} setTab={setTab} />
+        <div className="flex h-[calc(100vh-7rem)] flex-col items-center justify-center px-8 text-center">
+          <h1 className="font-display text-xl font-semibold">Log in for this tab</h1>
+          <p className="mt-2 text-sm text-ink-400">
+            Check out{" "}
+            <button onClick={() => setTab("popular")} className="text-mint-400 hover:underline">
+              Popular
+            </button>{" "}
+            in the meantime, or{" "}
+            <Link to="/login" className="text-mint-400 hover:underline">
+              log in
+            </Link>
+            .
+          </p>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative -mx-4 -my-6 md:-mx-8">
+      <TabBar tab={tab} setTab={setTab} />
+
+      {tab === "for-you" && (
+        <ReelsColumn
+          videos={forYouVideos}
+          isLoading={forYouQuery.isLoading}
+          emptyMessage="Nothing in your feed yet — like a few videos to train it."
+          onOpenComments={setCommentsVideoId}
+          onReachEnd={forYouQuery.hasNextPage ? () => forYouQuery.fetchNextPage() : undefined}
+        />
       )}
+
+      {tab === "popular" && (
+        <ReelsColumn
+          videos={popularQuery.data ?? []}
+          isLoading={popularQuery.isLoading}
+          emptyMessage="Nothing trending right now."
+          onOpenComments={setCommentsVideoId}
+        />
+      )}
+
+      {tab === "following" && (
+        <ReelsColumn
+          videos={followingQuery.data ?? []}
+          isLoading={subscriptionsQuery.isLoading || followingQuery.isLoading}
+          emptyMessage="Follow a few people to see their videos here."
+          onOpenComments={setCommentsVideoId}
+        />
+      )}
+
+      {tab === "my" && (
+        <ReelsColumn
+          videos={myVideos}
+          isLoading={myQuery.isLoading}
+          emptyMessage="You haven't uploaded anything yet."
+          onOpenComments={setCommentsVideoId}
+        />
+      )}
+
+      <CommentsDrawer videoId={commentsVideoId} onClose={() => setCommentsVideoId(null)} />
+    </div>
+  );
+}
+
+function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  return (
+    <div className="absolute inset-x-0 top-0 z-10 flex justify-center gap-1 bg-gradient-to-b from-black/70 to-transparent px-3 py-3">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => setTab(t.id)}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+            tab === t.id ? "bg-white text-ink-950" : "text-white/80 hover:text-white"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }

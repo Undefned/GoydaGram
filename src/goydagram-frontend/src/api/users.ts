@@ -1,27 +1,32 @@
 import { api } from "@/lib/api";
-import type { User } from "@/types";
+import type { UpdateProfileInput, User } from "@/types";
 
 export async function getMe() {
-  const { data } = await api.get<User>("/api/users/me");
+  const { data } = await api.get<User>("/api/Users/me");
+  return data;
+}
+
+export async function updateProfile(input: UpdateProfileInput) {
+  const { data } = await api.put<User>("/api/Users/me", input);
   return data;
 }
 
 export async function getUser(id: string) {
-  const { data } = await api.get<User>(`/api/users/${id}`);
+  const { data } = await api.get<User>(`/api/Users/${id}`);
   return data;
 }
 
 export async function getSubscriptions(id: string) {
-  const { data } = await api.get<User[]>(`/api/users/${id}/subscriptions`);
+  const { data } = await api.get<User[]>(`/api/Users/${id}/subscriptions`);
   return data;
 }
 
 export async function subscribe(id: string) {
-  await api.post(`/api/users/${id}/subscribe`);
+  await api.post(`/api/Users/${id}/subscribe`);
 }
 
 export async function unsubscribe(id: string) {
-  await api.delete(`/api/users/${id}/unsubscribe`);
+  await api.delete(`/api/Users/${id}/unsubscribe`);
 }
 
 export interface Interest {

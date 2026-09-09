@@ -12,6 +12,7 @@ type Config struct {
 	FeedBatchSize  int
 	PrefetchCount  int
 	TimeoutSec     int
+	JwtSecret      string
 }
 
 func LoadConfig() *Config {
@@ -25,6 +26,7 @@ func LoadConfig() *Config {
 		FeedBatchSize:  30,
 		PrefetchCount:  3,
 		TimeoutSec:     5,
+		JwtSecret:      getEnv("JWT_SECRET", ""),
 	}
 }
 

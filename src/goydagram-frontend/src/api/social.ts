@@ -18,18 +18,38 @@ export async function deleteComment(commentId: string) {
 }
 
 export async function getVideoComments(videoId: string, limit = 20, offset = 0) {
-  const { data } = await api.get<{ data: Comment[]; total: number; limit: number; offset: number }>(
+  const { data } = await api.get<{ 
+    success: boolean; 
+    data: { 
+      data: Comment[]; 
+      total: number; 
+      limit: number; 
+      offset: number 
+    } 
+  }>(
     `/api/videos/${videoId}/comments`,
     { params: { limit, offset } }
   );
-  return data;
+  
+  const responseData = data.data || data;
+  const comments = responseData.data ?? [];
+  const total = responseData.total ?? 0;
+  const actualLimit = responseData.limit ?? limit;
+  const actualOffset = responseData.offset ?? offset;
+  
+  return {
+    data: Array.isArray(comments) ? comments : [],
+    total: total,
+    limit: actualLimit,
+    offset: actualOffset,
+  };
 }
 
 export async function getVideoCommentsCount(videoId: string) {
   const { data } = await api.get<{ video_id: string; comments: number }>(
     `/api/videos/${videoId}/comments/count`
   );
-  return data.comments;
+  return data.comments ?? 0;
 }
 
 // -- Likes -------------------------------------------------------------
@@ -44,7 +64,7 @@ export async function unlikeVideo(videoId: string, userId: string) {
 
 export async function getVideoLikesCount(videoId: string) {
   const { data } = await api.get<{ video_id: string; likes: number }>(`/api/videos/${videoId}/likes/count`);
-  return data.likes;
+  return data.likes ?? 0;
 }
 
 // -- Views ---------------------------------------------------------------

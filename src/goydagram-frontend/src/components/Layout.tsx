@@ -7,6 +7,7 @@ const navItems = [
   { to: "/trending", label: "Trending", icon: TrendingIcon },
   { to: "/search", label: "Search", icon: SearchIcon },
   { to: "/upload", label: "Upload", icon: UploadIcon },
+  { to: "/profile", label: "Profile", icon: ProfileIcon },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -159,6 +160,15 @@ function UploadIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
       <path d="M12 16V4M12 4l-4 4M12 4l4 4" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ProfileIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

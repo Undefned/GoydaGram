@@ -8,6 +8,7 @@ using ContentService.Application.Queries.GetTrending;
 using ContentService.Application.Commands.UploadVideo;
 using ContentService.Application.Commands.DeleteVideo;
 using ContentService.Application.Queries.GetUserVideos;
+using ContentService.Application.Commands.UpdateVideo;
 
 namespace ContentService.Controllers;
 
@@ -43,6 +44,7 @@ public class VideosController : ControllerBase
     }
 
     [HttpGet("trending")]
+    [AllowAnonymous]    
     public async Task<IActionResult> GetTrending([FromQuery] int limit = 30)
     {
         _logger.LogInformation("Get trending videos, limit: {Limit}", limit);
@@ -75,8 +77,8 @@ public class VideosController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        // Получаем ID пользователя из токена/контекста
-        var userId = User.FindFirst("userId")?.Value;
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId is null) return Unauthorized();
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
@@ -131,5 +133,23 @@ public class VideosController : ControllerBase
             data = result,
             pagination = new { limit, offset }
         });
+    }
+
+    [Authorize]
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateVideoRequest request)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value; // same claim as everywhere else in this controller
+        if (userId is null) return Unauthorized();
+
+        var result = await _mediator.Send(new UpdateVideoCommand(id, Guid.Parse(userId), request.Title, request.Description, request.Tags?.Split(',').Select(t => t.Trim()).ToList() ?? new()));
+
+        if (!result.Success)
+            return result.Message.Contains("not found") ? NotFound(result.Message)
+                : result.Message.Contains("permission") ? Forbid()
+                : BadRequest(result.Message);
+
+        var video = await _mediator.Send(new GetVideoQuery(id));
+        return Ok(video);
     }
 }
