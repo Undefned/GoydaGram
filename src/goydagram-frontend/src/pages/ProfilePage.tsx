@@ -31,14 +31,22 @@ export function ProfilePage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4">
-        <Avatar url={user.avatarUrl} name={user.username} size="h-16 w-16" />
-        <div>
-          <h1 className="font-display text-xl font-semibold">{user.username}</h1>
-          <p className="text-sm text-ink-400">
-            {formatCount(user.followersCount)} followers · {formatCount(user.followingCount)} following
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Avatar url={user.avatarUrl} name={user.username} size="h-16 w-16" />
+          <div>
+            <h1 className="font-display text-xl font-semibold">{user.username}</h1>
+            <p className="text-sm text-ink-400">
+              {formatCount(user.followersCount)} followers · {formatCount(user.followingCount)} following
+            </p>
+          </div>
         </div>
+        <Link
+          to="/profile/edit"
+          className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-200 hover:border-mint-400 hover:text-mint-400 transition-colors"
+        >
+          Edit profile
+        </Link>
       </div>
 
       {user.bio && <p className="mt-4 max-w-lg text-sm text-ink-200">{user.bio}</p>}

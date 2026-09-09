@@ -388,6 +388,7 @@ services:
       - USER_API=http://user-service:8080
       - SOCIAL_API=http://social-service:8080
       - SEARCH_API=http://search-service:8000
+      - JWT_SECRET=${JWT_SECRET}
     ports:
       - "127.0.0.1:5004:8080"
     depends_on:

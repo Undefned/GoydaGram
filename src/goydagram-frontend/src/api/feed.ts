@@ -1,8 +1,16 @@
 import { api } from "@/lib/api";
-import type { FeedResponse, Video } from "@/types";
+import type { FeedAuthor, FeedPage, FeedVideo } from "@/types";
+
+// FeedService wraps everything in { success, data } (see utils.Success in
+// its own source) and — once the backend patch in the README is applied —
+// emits camelCase to match ContentService/UserService.
+interface Envelope<T> {
+  success: boolean;
+  data: T;
+}
 
 export async function getFeed(params: { offset?: number; limit?: number; seen?: string[] }) {
-  const { data } = await api.get<{ success: boolean; data: FeedResponse }>("/api/feed", {
+  const { data } = await api.get<Envelope<FeedPage>>("/api/feed", {
     params: {
       offset: params.offset ?? 0,
       limit: params.limit ?? 30,
@@ -19,8 +27,10 @@ export async function prefetchFeed(offset = 0, seen: string[] = []) {
 }
 
 export async function getFeedTrending(limit = 30) {
-  const { data } = await api.get<{ success: boolean; data: { videos: Video[] } }>("/api/feed/trending", {
+  const { data } = await api.get<Envelope<{ videos: FeedVideo[] }>>("/api/feed/trending", {
     params: { limit },
   });
   return data.data.videos;
 }
+
+export type { FeedAuthor, FeedPage, FeedVideo };

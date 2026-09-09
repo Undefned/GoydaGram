@@ -7,6 +7,7 @@ import { FeedPage } from "@/pages/FeedPage";
 import { TrendingPage } from "@/pages/TrendingPage";
 import { VideoPage } from "@/pages/VideoPage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { EditProfilePage } from "@/pages/EditProfilePage";
 import { UserPage } from "@/pages/UserPage";
 import { SearchPage } from "@/pages/SearchPage";
 import { UploadPage } from "@/pages/UploadPage";

@@ -40,6 +40,44 @@ export interface Video {
   tags: string[];
 }
 
+// Author info as embedded by FeedService's own enrichment step (a smaller
+// projection than the full User type ContentService/UserService return).
+export interface FeedAuthor {
+  id: string;
+  username: string;
+  email: string;
+  avatarUrl: string | null;
+  isVerified: boolean;
+}
+
+// /api/feed and /api/feed/trending — FeedService's own response shape,
+// distinct from ContentService's VideoDto shape only in that each video may
+// carry an embedded `user`. Assumes FeedService's Go structs are patched to
+// use camelCase json tags matching ContentService's actual (System.Text.Json
+// default) output — see the backend patch notes for why that matters.
+export interface FeedVideo extends Video {
+  user?: FeedAuthor;
+}
+
+export interface FeedPage {
+  videos: FeedVideo[];
+  nextOffset: number;
+  hasMore: boolean;
+  totalCount?: number;
+}
+
+export interface UpdateProfileInput {
+  username?: string;
+  avatarUrl?: string;
+  bio?: string;
+}
+
+export interface UpdateVideoInput {
+  title?: string;
+  description?: string;
+  tags?: string[];
+}
+
 export interface Paginated<T> {
   data: T[];
   pagination: {
@@ -57,20 +95,6 @@ export interface Comment {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface FeedItem {
-  video_id?: string;
-  id?: string;
-  [key: string]: unknown;
-}
-
-export interface FeedResponse {
-  items?: FeedItem[];
-  videos?: Video[];
-  offset?: number;
-  limit?: number;
-  [key: string]: unknown;
 }
 
 export interface SearchVideosResponse {

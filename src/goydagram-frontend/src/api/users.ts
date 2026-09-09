@@ -1,8 +1,16 @@
 import { api } from "@/lib/api";
-import type { User } from "@/types";
+import type { UpdateProfileInput, User } from "@/types";
 
 export async function getMe() {
   const { data } = await api.get<User>("/api/users/me");
+  return data;
+}
+
+// Requires PUT /api/users/me on UserService — not present in the current
+// backend (User.UpdateProfile exists on the domain entity but nothing wires
+// it to a command/endpoint yet). See the README for the handler + route to add.
+export async function updateProfile(input: UpdateProfileInput) {
+  const { data } = await api.put<User>("/api/users/me", input);
   return data;
 }
 

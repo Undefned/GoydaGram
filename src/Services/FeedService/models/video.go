@@ -4,18 +4,18 @@ import "time"
 
 type Video struct {
 	ID            string    `json:"id"`
-	UserID        string    `json:"user_id"`
+	UserID        string    `json:"userId"`
 	Title         string    `json:"title"`
 	Description   string    `json:"description"`
 	Duration      int       `json:"duration"`
-	URL           string    `json:"url"`
-	PreviewURL    string    `json:"preview_url"`
-	HlsManifest   string    `json:"hls_manifest,omitempty"`
+	URL           string    `json:"originalUrl"`
+	PreviewURL    string    `json:"previewUrl"`
+	HlsManifest   string    `json:"hlsManifestUrl"`
 	Status        string    `json:"status"`
-	ViewsCount    int       `json:"views_count"`
-	LikesCount    int       `json:"likes_count"`
-	CommentsCount int       `json:"comments_count"`
-	CreatedAt     time.Time `json:"created_at"`
+	ViewsCount    int       `json:"viewsCount"`
+	LikesCount    int       `json:"likesCount"`
+	CommentsCount int       `json:"commentsCount"`
+	CreatedAt     time.Time `json:"createdAt"`
 	User          *User     `json:"user,omitempty"`
 	Tags          []string  `json:"tags,omitempty"`
 }
@@ -24,8 +24,8 @@ type User struct {
 	ID         string `json:"id"`
 	Username   string `json:"username"`
 	Email      string `json:"email"`
-	AvatarURL  string `json:"avatar_url"`
-	IsVerified bool   `json:"is_verified"`
+	AvatarURL  string `json:"avatarUrl"`
+	IsVerified bool   `json:"isVerified"`
 }
 
 type Interest struct {

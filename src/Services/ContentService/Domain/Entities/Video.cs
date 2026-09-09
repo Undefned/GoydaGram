@@ -105,4 +105,13 @@ public class Video
     public void IncrementViews() => ViewsCount++;
     public void IncrementLikes() => LikesCount++;
     public void IncrementComments() => CommentsCount++;
+
+    public void UpdateDetails(string? title, string? description)
+    {
+        if (!string.IsNullOrWhiteSpace(title)) Title = title;
+        if (description is not null) Description = description;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ClearTags() => _tags.Clear();
 }

@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { Video } from "@/types";
+import type { UpdateVideoInput, Video } from "@/types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
 
@@ -50,6 +50,14 @@ export async function uploadVideo(
       if (onProgress && evt.total) onProgress(Math.round((evt.loaded / evt.total) * 100));
     },
   });
+  return data;
+}
+
+// Requires PUT /api/videos/{id} on ContentService — there's currently no
+// update command at all (only Upload/Delete/Block/Unblock). See the README
+// for the entity method + command/handler/route to add.
+export async function updateVideo(id: string, input: UpdateVideoInput) {
+  const { data } = await api.put<Video>(`/api/videos/${id}`, input);
   return data;
 }
 

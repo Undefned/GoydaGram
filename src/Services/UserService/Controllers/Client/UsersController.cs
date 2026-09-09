@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.Commands.Subscribe;
 using UserService.Application.Commands.Unsubscribe;
+using UserService.Application.Commands;
+using UserService.Application.DTOs;
 using UserService.Application.Queries.GetSubscriptions;
 using UserService.Application.Queries.GetUser;
 
@@ -71,5 +73,22 @@ public class UsersController : ControllerBase
         var command = new UnsubscribeCommand(followerId, id);
         await _mediator.Send(command);
         return NoContent();
+    }
+
+    [Authorize]
+    [HttpPut("me")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId is null) return Unauthorized();
+
+        var result = await _mediator.Send(new UpdateProfileCommand(
+            Guid.Parse(userId), request.Username, request.AvatarUrl, request.Bio));
+
+        if (!result.Success)
+            return result.Message.Contains("not found") ? NotFound(result.Message) : BadRequest(result.Message);
+
+        var user = await _mediator.Send(new GetUserQuery(Guid.Parse(userId)));
+        return Ok(user);
     }
 }

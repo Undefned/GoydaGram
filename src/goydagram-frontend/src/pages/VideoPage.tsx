@@ -6,6 +6,7 @@ import { getSubscriptions, getUser, subscribe, unsubscribe } from "@/api/users";
 import { getVideoLikesCount, likeVideo, recordView, unlikeVideo } from "@/api/social";
 import { HlsPlayer } from "@/components/HlsPlayer";
 import { CommentSection } from "@/components/CommentSection";
+import { EditVideoModal } from "@/components/EditVideoModal";
 import { Avatar } from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +23,7 @@ export function VideoPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [liked, setLiked] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const hasRecordedView = useRef(false);
 
   const videoQuery = useQuery({
@@ -150,14 +152,22 @@ export function VideoPage() {
           )}
 
           {isOwner && (
-            <button
-              onClick={() => {
-                if (confirm("Delete this video?")) deleteMutation.mutate();
-              }}
-              className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-400 hover:border-flare-500 hover:text-flare-400 transition-colors"
-            >
-              Delete
-            </button>
+            <>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-200 hover:border-mint-400 hover:text-mint-400 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm("Delete this video?")) deleteMutation.mutate();
+                }}
+                className="rounded-full border border-ink-700 px-4 py-2 text-sm font-medium text-ink-400 hover:border-flare-500 hover:text-flare-400 transition-colors"
+              >
+                Delete
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -185,6 +195,8 @@ export function VideoPage() {
       <div className="mt-8 border-t border-ink-800 pt-6">
         <CommentSection videoId={video.id} />
       </div>
+
+      {isEditing && <EditVideoModal video={video} onClose={() => setIsEditing(false)} />}
     </div>
   );
 }
