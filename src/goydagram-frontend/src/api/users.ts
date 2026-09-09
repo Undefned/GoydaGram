@@ -2,34 +2,31 @@ import { api } from "@/lib/api";
 import type { UpdateProfileInput, User } from "@/types";
 
 export async function getMe() {
-  const { data } = await api.get<User>("/api/users/me");
+  const { data } = await api.get<User>("/api/Users/me");
   return data;
 }
 
-// Requires PUT /api/users/me on UserService — not present in the current
-// backend (User.UpdateProfile exists on the domain entity but nothing wires
-// it to a command/endpoint yet). See the README for the handler + route to add.
 export async function updateProfile(input: UpdateProfileInput) {
-  const { data } = await api.put<User>("/api/users/me", input);
+  const { data } = await api.put<User>("/api/Users/me", input);
   return data;
 }
 
 export async function getUser(id: string) {
-  const { data } = await api.get<User>(`/api/users/${id}`);
+  const { data } = await api.get<User>(`/api/Users/${id}`);
   return data;
 }
 
 export async function getSubscriptions(id: string) {
-  const { data } = await api.get<User[]>(`/api/users/${id}/subscriptions`);
+  const { data } = await api.get<User[]>(`/api/Users/${id}/subscriptions`);
   return data;
 }
 
 export async function subscribe(id: string) {
-  await api.post(`/api/users/${id}/subscribe`);
+  await api.post(`/api/Users/${id}/subscribe`);
 }
 
 export async function unsubscribe(id: string) {
-  await api.delete(`/api/users/${id}/unsubscribe`);
+  await api.delete(`/api/Users/${id}/unsubscribe`);
 }
 
 export interface Interest {
@@ -37,6 +34,9 @@ export interface Interest {
   weight: number;
 }
 
+// SocialService (Go/Gin) owns this route, not UserService — different
+// service, different (lowercase) casing convention. Gin's router is
+// case-sensitive, so don't "fix" this to match UserService's PascalCase.
 export async function getUserInterests(userId: string) {
   const { data } = await api.get<{ user_id: string; interests: Interest[] }>(
     `/api/users/${userId}/interests`

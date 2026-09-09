@@ -113,5 +113,11 @@ public class Video
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void SetDuration(int duration)
+    {
+        Duration = duration;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void ClearTags() => _tags.Clear();
 }

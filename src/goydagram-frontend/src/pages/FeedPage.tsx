@@ -48,7 +48,7 @@ function ReelsColumn({
 
   if (isLoading) {
     return (
-      <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center md:h-screen">
+      <div className="flex h-[calc(100vh-7rem)] items-center justify-center md:h-[calc(100vh-7rem)]">
         <p className="text-sm text-ink-400">Loading…</p>
       </div>
     );
@@ -56,14 +56,14 @@ function ReelsColumn({
 
   if (videos.length === 0) {
     return (
-      <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center px-8 text-center md:h-screen">
+      <div className="flex h-[calc(100vh-7rem)] items-center justify-center px-8 text-center md:h-[calc(100vh-7rem)]">
         <p className="text-sm text-ink-400">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] snap-y snap-mandatory overflow-y-scroll no-scrollbar md:h-screen">
+    <div className="h-[calc(100vh-7rem)] snap-y snap-mandatory overflow-y-scroll no-scrollbar md:h-[calc(100vh-7rem)]">
       {videos.map((video) => (
         <ReelCard key={video.id} video={video} onOpenComments={onOpenComments} />
       ))}
@@ -84,25 +84,28 @@ export function FeedPage() {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
     initialPageParam: 0,
     enabled: Boolean(user) && tab === "for-you",
+    retry: false,
+    placeholderData: (prev) => prev ?? { pages: [], pageParams: [] },
   });
   const forYouVideos = useMemo(
     () => forYouQuery.data?.pages.flatMap((p) => p.videos) ?? [],
     [forYouQuery.data]
   );
 
-  // ---- Popular: FeedService's trending, already author-enriched -----
+  // ---- Popular: FeedService's trending ------------------------------
   const popularQuery = useQuery({
     queryKey: ["feed", "popular"],
     queryFn: () => getFeedTrending(PAGE_SIZE),
     enabled: tab === "popular",
+    placeholderData: [],
   });
 
-  // ---- Following: no dedicated backend endpoint — composed client-side
-  // from each followee's latest uploads, sorted by recency. See README.
+  // ---- Following: composed client-side ------------------------------
   const subscriptionsQuery = useQuery({
     queryKey: ["subscriptions", user?.id],
     queryFn: () => getSubscriptions(user!.id),
     enabled: Boolean(user) && tab === "following",
+    placeholderData: [],
   });
 
   const followingQuery = useQuery({
@@ -111,25 +114,33 @@ export function FeedPage() {
       const followees = subscriptionsQuery.data ?? [];
       const perFollowee = await Promise.all(
         followees.map(async (followee) => {
-          const page = await getUserVideos(followee.id, 10, 0);
-          return page.data.map((v): FeedVideo => ({ ...v, user: { ...followee, email: "" } }));
+          try {
+            const page = await getUserVideos(followee.id, 10, 0);
+            return page.data.map((v): FeedVideo => ({ ...v, user: { ...followee, email: "" } }));
+          } catch {
+            return [];
+          }
         })
       );
       return perFollowee
         .flat()
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     },
-    enabled: Boolean(subscriptionsQuery.data),
+    enabled: Boolean(subscriptionsQuery.data) && tab === "following",
+    placeholderData: [],
   });
 
-  // ---- My: own uploads, author = self, no extra lookup needed --------
+  // ---- My: own uploads ---------------------------------------------
   const myQuery = useQuery({
     queryKey: ["feed", "my"],
     queryFn: () => getMyVideos(PAGE_SIZE, 0),
     enabled: Boolean(user) && tab === "my",
+    placeholderData: { data: [], pagination: { limit: PAGE_SIZE, offset: 0, total: 0 } },
   });
   const myVideos = useMemo(
-    () => (myQuery.data?.data ?? []).map((v): FeedVideo => (user ? { ...v, user: { ...user, email: user.email } } : v)),
+    () => (myQuery.data?.data ?? []).map((v): FeedVideo => 
+      user ? { ...v, user: { ...user, email: user.email } } : v
+    ),
     [myQuery.data, user]
   );
 

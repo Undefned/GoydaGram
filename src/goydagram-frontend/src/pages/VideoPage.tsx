@@ -10,6 +10,7 @@ import { EditVideoModal } from "@/components/EditVideoModal";
 import { Avatar } from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { getHlsUrl } from "@/api/videos";
 
 function formatCount(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -42,6 +43,7 @@ export function VideoPage() {
     queryKey: ["video-likes", id],
     queryFn: () => getVideoLikesCount(id!),
     enabled: Boolean(id),
+    placeholderData: 0,
   });
 
   const likeMutation = useMutation({
@@ -81,9 +83,7 @@ export function VideoPage() {
   const handlePlay = () => {
     if (!hasRecordedView.current && user && id) {
       hasRecordedView.current = true;
-      recordView(id, user.id).catch(() => {
-        hasRecordedView.current = false;
-      });
+      recordView(id, user.id);
     }
   };
 
@@ -92,6 +92,7 @@ export function VideoPage() {
   }, [id]);
 
   const video = videoQuery.data;
+  const likesCount = likesQuery.data ?? video?.likesCount ?? 0;
 
   if (videoQuery.isLoading) {
     return <p className="text-sm text-ink-400">Loading video…</p>;
@@ -107,7 +108,7 @@ export function VideoPage() {
     <div className="mx-auto max-w-4xl">
       <div className="aspect-video">
         <HlsPlayer
-          src={resolveMediaUrl(video.hlsManifestUrl, "stream")}
+          src={getHlsUrl(video.hlsManifestUrl) || resolveMediaUrl(video.originalUrl, "stream")}
           poster={video.previewUrl ? resolveMediaUrl(video.previewUrl, "preview") : undefined}
           onPlay={handlePlay}
         />
@@ -134,7 +135,7 @@ export function VideoPage() {
               liked ? "border-flare-500 text-flare-500" : "border-ink-700 text-ink-200 hover:border-flare-500 hover:text-flare-500"
             }`}
           >
-            {liked ? "Liked" : "Like"} · {formatCount(likesQuery.data ?? video.likesCount)}
+            {liked ? "Liked" : "Like"} · {formatCount(likesCount)}
           </button>
 
           {user && !isOwner && (

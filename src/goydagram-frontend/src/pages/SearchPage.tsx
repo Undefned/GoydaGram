@@ -1,12 +1,21 @@
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { AxiosError } from "axios";
 import { searchUsers, searchVideos } from "@/api/search";
 import { VideoGrid, VideoGridSkeleton } from "@/components/VideoGrid";
 import { Avatar } from "@/components/Layout";
 import { Link } from "react-router-dom";
 
 type Tab = "videos" | "users";
+
+function errorMessage(err: unknown) {
+  if (err instanceof AxiosError) {
+    if (!err.response) return "Couldn't reach the search service — check it's running and reachable via the gateway.";
+    return `Search failed (${err.response.status}): ${err.response.data?.message ?? err.response.statusText}`;
+  }
+  return "Something went wrong while searching.";
+}
 
 export function SearchPage() {
   const [params] = useSearchParams();
@@ -17,17 +26,24 @@ export function SearchPage() {
     queryKey: ["search-videos", q],
     queryFn: () => searchVideos({ q, limit: 40 }),
     enabled: q.length > 0 && tab === "videos",
+    retry: false,
+    placeholderData: { videos: [], total: 0, offset: 0, limit: 40 },
   });
 
   const usersQuery = useQuery({
     queryKey: ["search-users", q],
     queryFn: () => searchUsers({ q, limit: 40 }),
     enabled: q.length > 0 && tab === "users",
+    retry: false,
+    placeholderData: { users: [], total: 0, offset: 0, limit: 40 },
   });
 
   if (!q) {
     return <p className="text-sm text-ink-400">Search for videos or people using the bar above.</p>;
   }
+
+  const videos = videosQuery.data?.videos ?? [];
+  const users = usersQuery.data?.users ?? [];
 
   return (
     <div>
@@ -47,17 +63,32 @@ export function SearchPage() {
         ))}
       </div>
 
-      {tab === "videos" &&
-        (videosQuery.isLoading ? (
-          <VideoGridSkeleton />
-        ) : (
-          <VideoGrid videos={videosQuery.data?.videos ?? []} emptyMessage="No videos matched." />
-        ))}
+      {tab === "videos" && (
+        <>
+          {videosQuery.isError && (
+            <p className="mb-4 rounded-lg bg-flare-500/10 px-3 py-2 text-sm text-flare-400">
+              {errorMessage(videosQuery.error)}
+            </p>
+          )}
+          {videosQuery.isLoading ? (
+            <VideoGridSkeleton />
+          ) : (
+            !videosQuery.isError && (
+              <VideoGrid videos={videos} emptyMessage="No videos matched." />
+            )
+          )}
+        </>
+      )}
 
       {tab === "users" && (
         <div className="space-y-3">
+          {usersQuery.isError && (
+            <p className="rounded-lg bg-flare-500/10 px-3 py-2 text-sm text-flare-400">
+              {errorMessage(usersQuery.error)}
+            </p>
+          )}
           {usersQuery.isLoading && <p className="text-sm text-ink-400">Searching…</p>}
-          {usersQuery.data?.users.map((u) => (
+          {!usersQuery.isLoading && users.map((u) => (
             <Link
               key={u.id}
               to={`/users/${u.id}`}
@@ -70,7 +101,7 @@ export function SearchPage() {
               </div>
             </Link>
           ))}
-          {usersQuery.data && usersQuery.data.users.length === 0 && (
+          {!usersQuery.isLoading && users.length === 0 && (
             <p className="text-sm text-ink-400">No people matched.</p>
           )}
         </div>

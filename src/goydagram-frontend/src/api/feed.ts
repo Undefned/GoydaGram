@@ -1,36 +1,48 @@
 import { api } from "@/lib/api";
 import type { FeedAuthor, FeedPage, FeedVideo } from "@/types";
 
-// FeedService wraps everything in { success, data } (see utils.Success in
-// its own source) and — once the backend patch in the README is applied —
-// emits camelCase to match ContentService/UserService.
 interface Envelope<T> {
   success: boolean;
   data: T;
 }
 
 export async function getFeed(params: { offset?: number; limit?: number; seen?: string[] }) {
-  const { data } = await api.get<Envelope<FeedPage>>("/api/feed", {
-    params: {
-      offset: params.offset ?? 0,
-      limit: params.limit ?? 30,
-      seen: params.seen?.length ? params.seen.join(",") : undefined,
-    },
-  });
-  return data.data;
+  try {
+    const { data } = await api.get<Envelope<FeedPage>>("/api/feed", {
+      params: {
+        offset: params.offset ?? 0,
+        limit: params.limit ?? 30,
+        seen: params.seen?.length ? params.seen.join(",") : undefined,
+      },
+    });
+    return data.data;
+  } catch (error) {
+    console.error("Failed to fetch feed:", error);
+    // Возвращаем пустой результат вместо ошибки
+    return { videos: [], nextOffset: 0, hasMore: false };
+  }
 }
 
 export async function prefetchFeed(offset = 0, seen: string[] = []) {
-  await api.get("/api/feed", {
-    params: { offset, prefetch: true, seen: seen.length ? seen.join(",") : undefined },
-  });
+  try {
+    await api.get("/api/feed", {
+      params: { offset, prefetch: true, seen: seen.length ? seen.join(",") : undefined },
+    });
+  } catch (error) {
+    console.error("Failed to prefetch feed:", error);
+  }
 }
 
 export async function getFeedTrending(limit = 30) {
-  const { data } = await api.get<Envelope<{ videos: FeedVideo[] }>>("/api/feed/trending", {
-    params: { limit },
-  });
-  return data.data.videos;
+  try {
+    const { data } = await api.get<Envelope<{ videos: FeedVideo[] }>>("/api/feed/trending", {
+      params: { limit },
+    });
+    return data.data.videos;
+  } catch (error) {
+    console.error("Failed to fetch trending:", error);
+    return [];
+  }
 }
 
 export type { FeedAuthor, FeedPage, FeedVideo };

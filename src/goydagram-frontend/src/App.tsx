@@ -38,6 +38,14 @@ export default function App() {
                 }
               />
               <Route
+                path="/profile/edit"
+                element={
+                  <ProtectedRoute>
+                    <EditProfilePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/upload"
                 element={
                   <ProtectedRoute>

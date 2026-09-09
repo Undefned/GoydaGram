@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import type { AuthResult } from "@/types";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
 
 const ACCESS_TOKEN_KEY = "goydagram_access_token";
 const REFRESH_TOKEN_KEY = "goydagram_refresh_token";
@@ -21,19 +21,25 @@ export const tokenStore = {
 
 export const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-api.interceptors.request.use((config) => {
-  const token = tokenStore.getAccess();
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// ✅ Добавляем токен в каждый запрос
+api.interceptors.request.use(
+  (config) => {
+    const token = tokenStore.getAccess();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-// Single-flight refresh so concurrent 401s don't each trigger their own
-// POST /api/auth/refresh (the backend rotates + revokes the token on use,
-// so a second call with the now-stale refresh token would fail).
+// Single-flight refresh
 let refreshPromise: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -42,12 +48,13 @@ async function refreshAccessToken(): Promise<string | null> {
 
   if (!refreshPromise) {
     refreshPromise = axios
-      .post<AuthResult>(`${BASE_URL}/api/auth/refresh`, { refreshToken })
+      .post<AuthResult>(`${BASE_URL}/api/Auth/refresh`, { refreshToken })
       .then((res) => {
         tokenStore.set(res.data.accessToken, res.data.refreshToken);
         return res.data.accessToken;
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Refresh token failed:", error);
         tokenStore.clear();
         return null;
       })
@@ -63,7 +70,12 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
 
-    if (error.response?.status === 401 && original && !original._retried) {
+    // Не пытаемся рефрешить на эндпоинтах авторизации
+    const isAuthEndpoint = original?.url?.includes("/api/Auth/login") || 
+                           original?.url?.includes("/api/Auth/register") ||
+                           original?.url?.includes("/api/Auth/refresh");
+
+    if (error.response?.status === 401 && original && !original._retried && !isAuthEndpoint) {
       original._retried = true;
       const newToken = await refreshAccessToken();
       if (newToken) {
@@ -72,9 +84,23 @@ api.interceptors.response.use(
         return api(original);
       }
       // Refresh failed — force a clean login.
+      tokenStore.clear();
       window.location.assign("/login");
+      return Promise.reject(error);
     }
 
     return Promise.reject(error);
   }
+);
+
+api.interceptors.request.use(
+  (config) => {
+    const token = tokenStore.getAccess();
+    console.log('🔑 Sending request to:', config.url, 'Token:', token ? '✅ Present' : '❌ Missing');
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );

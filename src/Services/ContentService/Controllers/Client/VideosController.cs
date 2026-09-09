@@ -44,6 +44,7 @@ public class VideosController : ControllerBase
     }
 
     [HttpGet("trending")]
+    [AllowAnonymous]    
     public async Task<IActionResult> GetTrending([FromQuery] int limit = 30)
     {
         _logger.LogInformation("Get trending videos, limit: {Limit}", limit);

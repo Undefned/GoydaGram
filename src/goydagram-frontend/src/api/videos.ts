@@ -1,37 +1,62 @@
 import { api } from "@/lib/api";
 import type { UpdateVideoInput, Video } from "@/types";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
 
 export async function getVideo(id: string) {
-  const { data } = await api.get<Video>(`/api/videos/${id}`);
-  return data;
+  try {
+    const { data } = await api.get<Video>(`/api/Videos/${id}`);
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch video:", error);
+    throw error;
+  }
 }
 
 export async function getVideosBatch(videoIds: string[]) {
-  const { data } = await api.post<Video[]>("/api/videos/batch", { videoIds });
-  return data;
+  try {
+    const { data } = await api.post<Video[]>("/api/Videos/batch", { videoIds });
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch videos batch:", error);
+    return [];
+  }
 }
 
 export async function getTrendingVideos(limit = 30) {
-  const { data } = await api.get<Video[]>("/api/videos/trending", { params: { limit } });
-  return data;
+  try {
+    const { data } = await api.get<Video[]>("/api/Videos/trending", { params: { limit } });
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch trending videos:", error);
+    return [];
+  }
 }
 
 export async function getMyVideos(limit = 30, offset = 0) {
-  const { data } = await api.get<{ data: Video[]; pagination: { limit: number; offset: number; total: number } }>(
-    "/api/videos/user",
-    { params: { limit, offset } }
-  );
-  return data;
+  try {
+    const { data } = await api.get<{ data: Video[]; pagination: { limit: number; offset: number; total: number } }>(
+      "/api/Videos/user",
+      { params: { limit, offset } }
+    );
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch my videos:", error);
+    return { data: [], pagination: { limit, offset, total: 0 } };
+  }
 }
 
 export async function getUserVideos(userId: string, limit = 30, offset = 0) {
-  const { data } = await api.get<{ data: Video[]; pagination: { limit: number; offset: number } }>(
-    `/api/videos/user/${userId}`,
-    { params: { limit, offset } }
-  );
-  return data;
+  try {
+    const { data } = await api.get<{ data: Video[]; pagination: { limit: number; offset: number } }>(
+      `/api/Videos/user/${userId}`,
+      { params: { limit, offset } }
+    );
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch user videos:", error);
+    return { data: [], pagination: { limit, offset } };
+  }
 }
 
 export async function uploadVideo(
@@ -44,7 +69,7 @@ export async function uploadVideo(
   form.append("Tags", input.tags.join(","));
   form.append("File", input.file);
 
-  const { data } = await api.post<Video>("/api/videos/upload", form, {
+  const { data } = await api.post<Video>("/api/Videos/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (evt) => {
       if (onProgress && evt.total) onProgress(Math.round((evt.loaded / evt.total) * 100));
@@ -53,33 +78,78 @@ export async function uploadVideo(
   return data;
 }
 
-// Requires PUT /api/videos/{id} on ContentService — there's currently no
-// update command at all (only Upload/Delete/Block/Unblock). See the README
-// for the entity method + command/handler/route to add.
 export async function updateVideo(id: string, input: UpdateVideoInput) {
-  const { data } = await api.put<Video>(`/api/videos/${id}`, input);
-  return data;
+  try {
+    const { data } = await api.put<Video>(`/api/Videos/${id}`, input);
+    return data;
+  } catch (error) {
+    console.error("Failed to update video:", error);
+    throw error;
+  }
 }
 
 export async function deleteVideo(id: string) {
-  const { data } = await api.delete(`/api/videos/${id}`);
-  return data;
+  try {
+    const { data } = await api.delete(`/api/Videos/${id}`);
+    return data;
+  } catch (error) {
+    console.error("Failed to delete video:", error);
+    throw error;
+  }
 }
 
-// Stream/preview are public (AllowAnonymous) and served straight off ApiGateway,
-// so these are plain URL builders rather than axios calls.
 export function streamUrl(path: string) {
-  return `${BASE_URL}/api/videos/stream/${path.replace(/^\/+/, "")}`;
+  const cleanPath = path.replace(/^\/+/, "");
+  return `${BASE_URL}/api/videos/stream/${cleanPath}`;
 }
 
 export function previewUrl(path: string) {
-  return `${BASE_URL}/api/videos/stream/preview/${path.replace(/^\/+/, "")}`;
+  const cleanPath = path.replace(/^\/+/, "");
+  return `${BASE_URL}/api/videos/stream/preview/${cleanPath}`;
 }
 
-// VideoDto.HlsManifestUrl / PreviewUrl may already come back as absolute URLs
-// (if the storage service returns them that way) or as bare object keys —
-// this normalizes either case to something an <img>/<video> tag can load.
-export function resolveMediaUrl(urlOrPath: string, kind: "stream" | "preview") {
-  if (/^https?:\/\//i.test(urlOrPath)) return urlOrPath;
-  return kind === "stream" ? streamUrl(urlOrPath) : previewUrl(urlOrPath);
+export function resolveMediaUrl(urlOrPath: string, kind: "stream" | "preview" | "hls" = "stream") {
+  if (/^https?:\/\//i.test(urlOrPath)) {
+    return urlOrPath;
+  }
+  
+  if (urlOrPath.startsWith("/api/")) {
+    return `${BASE_URL}${urlOrPath}`;
+  }
+  
+  if (kind === "hls" || urlOrPath.includes("/hls/") || urlOrPath.includes("playlist.m3u8")) {
+    const cleanPath = urlOrPath.replace(/^\/+/, "");
+    return `${BASE_URL}/api/videos/stream/${cleanPath}`;
+  }
+  
+  if (kind === "preview" || urlOrPath.includes("preview") || urlOrPath.endsWith(".jpg")) {
+    return previewUrl(urlOrPath);
+  }
+  
+  return streamUrl(urlOrPath);
+}
+
+export function getHlsUrl(hlsManifestUrl: string | null | undefined): string | null {
+  if (!hlsManifestUrl) return null;
+  
+  if (/^https?:\/\//i.test(hlsManifestUrl)) {
+    return hlsManifestUrl;
+  }
+  
+  if (hlsManifestUrl.startsWith("/api/")) {
+    return `${BASE_URL}${hlsManifestUrl}`;
+  }
+  
+  const cleanPath = hlsManifestUrl.replace(/^\/+/, "");
+  return `${BASE_URL}/api/videos/stream/${cleanPath}`;
+}
+
+// Добавляем проверку доступности видео
+export async function checkVideoAvailability(videoId: string): Promise<boolean> {
+  try {
+    const response = await api.head(`/api/videos/${videoId}`);
+    return response.status === 200;
+  } catch {
+    return false;
+  }
 }

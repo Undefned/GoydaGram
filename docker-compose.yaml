@@ -384,11 +384,12 @@ services:
     environment:
       - PORT=8080
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - CONTENT_API=http://content-service:8080
-      - USER_API=http://user-service:8080
-      - SOCIAL_API=http://social-service:8080
-      - SEARCH_API=http://search-service:8000
+      - CONTENT_SERVICE=http://content-service:8080
+      - USER_SERVICE=http://user-service:8080
+      - SOCIAL_SERVICE=http://social-service:8080
+      - SEARCH_SERVICE=http://search-service:8000
       - JWT_SECRET=${JWT_SECRET}
+      - ENV=development
     ports:
       - "127.0.0.1:5004:8080"
     depends_on:

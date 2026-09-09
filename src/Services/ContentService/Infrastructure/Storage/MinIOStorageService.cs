@@ -8,10 +8,12 @@ public class MinIOStorageService : IStorageService
 {
     private readonly IMinioClient _minioClient;
     private readonly string _bucketName = "videos";
+    private readonly ILogger<MinIOStorageService> _logger;
 
-    public MinIOStorageService(IMinioClient minioClient)
+    public MinIOStorageService(IMinioClient minioClient, ILogger<MinIOStorageService> logger)
     {
         _minioClient = minioClient;
+        _logger = logger;
     }
 
     public async Task<string> UploadFileAsync(string path, Stream stream, string contentType, CancellationToken cancellationToken = default)
@@ -29,27 +31,56 @@ public class MinIOStorageService : IStorageService
 
     public async Task<Stream> DownloadFileAsync(string path, CancellationToken cancellationToken = default)
     {
-        var memoryStream = new MemoryStream();
-        var args = new GetObjectArgs()
-            .WithBucket(_bucketName)
-            .WithObject(path)
-            .WithCallbackStream(async stream =>
-            {
-                await stream.CopyToAsync(memoryStream, cancellationToken);
-                memoryStream.Position = 0;
-            });
+        try
+        {
+            _logger.LogInformation("Downloading file from MinIO: {Path}", path);
+            
+            // ✅ Используем MemoryStream с предварительным выделением памяти
+            using var ms = new MemoryStream();
+            
+            var args = new GetObjectArgs()
+                .WithBucket(_bucketName)
+                .WithObject(path)
+                .WithCallbackStream(async stream =>
+                {
+                    // ✅ Копируем весь поток в MemoryStream
+                    await stream.CopyToAsync(ms, cancellationToken);
+                });
 
-        await _minioClient.GetObjectAsync(args, cancellationToken);
-        return memoryStream;
+            await _minioClient.GetObjectAsync(args, cancellationToken);
+            
+            // ✅ Создаем НОВЫЙ MemoryStream с данными
+            var resultStream = new MemoryStream(ms.ToArray());
+            resultStream.Position = 0;
+            
+            _logger.LogInformation("Successfully downloaded file: {Path}, Size: {Size} bytes", 
+                path, resultStream.Length);
+            
+            return resultStream;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to download file from MinIO: {Path}", path);
+            throw;
+        }
     }
 
     public async Task DeleteFileAsync(string path, CancellationToken cancellationToken = default)
     {
-        var args = new RemoveObjectArgs()
-            .WithBucket(_bucketName)
-            .WithObject(path);
+        try
+        {
+            var args = new RemoveObjectArgs()
+                .WithBucket(_bucketName)
+                .WithObject(path);
 
-        await _minioClient.RemoveObjectAsync(args, cancellationToken);
+            await _minioClient.RemoveObjectAsync(args, cancellationToken);
+            _logger.LogInformation("Deleted file from MinIO: {Path}", path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete file from MinIO: {Path}", path);
+            throw;
+        }
     }
 
     public string GetFileUrl(string path)
