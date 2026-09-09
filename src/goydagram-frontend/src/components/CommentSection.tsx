@@ -48,11 +48,8 @@ export function CommentSection({ videoId }: { videoId: string }) {
     if (text.trim()) addMutation.mutate();
   };
 
-  // ✅ Безопасное получение данных
   const comments = Array.isArray(data?.data) ? data.data : [];
   const total = data?.total ?? 0;
-
-  console.log("CommentSection render:", { comments, total, data });
 
   return (
     <div>

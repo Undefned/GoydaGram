@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteVideo, getVideo, resolveMediaUrl } from "@/api/videos";
-import { getSubscriptions, getUser, subscribe, unsubscribe } from "@/api/users";
+import { deleteVideo, getVideo, resolveMediaUrl, getHlsUrl } from "@/api/videos";
+import { getSubscriptions, getUser, subscribe, unsubscribe, refreshUserInterests } from "@/api/users";
 import { getVideoLikesCount, likeVideo, recordView, unlikeVideo } from "@/api/social";
 import { HlsPlayer } from "@/components/HlsPlayer";
 import { CommentSection } from "@/components/CommentSection";
@@ -10,7 +10,6 @@ import { EditVideoModal } from "@/components/EditVideoModal";
 import { Avatar } from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { getHlsUrl } from "@/api/videos";
 
 function formatCount(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -54,6 +53,10 @@ export function VideoPage() {
     onSuccess: () => {
       setLiked((prev) => !prev);
       queryClient.invalidateQueries({ queryKey: ["video-likes", id] });
+      // Обновляем интересы после лайка (fire-and-forget)
+      if (!liked && user) {
+        refreshUserInterests(user.id).catch(() => {});
+      }
     },
   });
 

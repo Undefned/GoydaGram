@@ -13,7 +13,6 @@ export function useAudioState() {
     };
     listeners.add(listener);
     
-    // Синхронизируем с глобальным состоянием при монтировании
     setIsMuted(globalMutedState);
     
     return () => {

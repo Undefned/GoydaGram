@@ -1,6 +1,7 @@
 using ContentService.Application.Interfaces;
 using Minio;
 using Minio.DataModel.Args;
+using Minio.Exceptions;
 
 namespace ContentService.Infrastructure.Storage;
 
@@ -18,15 +19,24 @@ public class MinIOStorageService : IStorageService
 
     public async Task<string> UploadFileAsync(string path, Stream stream, string contentType, CancellationToken cancellationToken = default)
     {
-        var args = new PutObjectArgs()
-            .WithBucket(_bucketName)
-            .WithObject(path)
-            .WithStreamData(stream)
-            .WithObjectSize(stream.Length)
-            .WithContentType(contentType);
+        try
+        {
+            var args = new PutObjectArgs()
+                .WithBucket(_bucketName)
+                .WithObject(path)
+                .WithStreamData(stream)
+                .WithObjectSize(stream.Length)
+                .WithContentType(contentType);
 
-        await _minioClient.PutObjectAsync(args, cancellationToken);
-        return GetFileUrl(path);
+            await _minioClient.PutObjectAsync(args, cancellationToken);
+            _logger.LogInformation("Uploaded file to MinIO: {Path}", path);
+            return GetFileUrl(path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to upload file to MinIO: {Path}", path);
+            throw;
+        }
     }
 
     public async Task<Stream> DownloadFileAsync(string path, CancellationToken cancellationToken = default)
@@ -34,29 +44,32 @@ public class MinIOStorageService : IStorageService
         try
         {
             _logger.LogInformation("Downloading file from MinIO: {Path}", path);
-            
-            // ✅ Используем MemoryStream с предварительным выделением памяти
-            using var ms = new MemoryStream();
+
+            // ✅ Правильный способ для MinIO SDK
+            var memoryStream = new MemoryStream();
             
             var args = new GetObjectArgs()
                 .WithBucket(_bucketName)
                 .WithObject(path)
-                .WithCallbackStream(async stream =>
+                .WithCallbackStream(async (stream) =>
                 {
-                    // ✅ Копируем весь поток в MemoryStream
-                    await stream.CopyToAsync(ms, cancellationToken);
+                    await stream.CopyToAsync(memoryStream, cancellationToken);
                 });
 
             await _minioClient.GetObjectAsync(args, cancellationToken);
             
-            // ✅ Создаем НОВЫЙ MemoryStream с данными
-            var resultStream = new MemoryStream(ms.ToArray());
-            resultStream.Position = 0;
+            // ✅ Сбрасываем позицию для чтения
+            memoryStream.Position = 0;
             
             _logger.LogInformation("Successfully downloaded file: {Path}, Size: {Size} bytes", 
-                path, resultStream.Length);
+                path, memoryStream.Length);
             
-            return resultStream;
+            return memoryStream;
+        }
+        catch (MinioException ex)
+        {
+            _logger.LogError(ex, "MinIO error downloading file: {Path}", path);
+            throw;
         }
         catch (Exception ex)
         {

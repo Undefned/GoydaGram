@@ -34,9 +34,6 @@ export interface Interest {
   weight: number;
 }
 
-// SocialService (Go/Gin) owns this route, not UserService — different
-// service, different (lowercase) casing convention. Gin's router is
-// case-sensitive, so don't "fix" this to match UserService's PascalCase.
 export async function getUserInterests(userId: string) {
   const { data } = await api.get<{ user_id: string; interests: Interest[] }>(
     `/api/users/${userId}/interests`

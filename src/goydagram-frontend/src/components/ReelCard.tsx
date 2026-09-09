@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FeedVideo } from "@/types";
 import { resolveMediaUrl, getHlsUrl } from "@/api/videos";
 import { getVideoLikesCount, likeVideo, recordView, unlikeVideo } from "@/api/social";
+import { refreshUserInterests } from "@/api/users";
 import { HlsPlayer } from "./HlsPlayer";
 import { Avatar } from "./Layout";
 import { useAuth } from "@/context/AuthContext";
@@ -27,6 +28,7 @@ export function ReelCard({ video, onOpenComments }: ReelCardProps) {
   const hasRecordedView = useRef(false);
 
   const [isActive, setIsActive] = useState(false);
+  const [hasBeenActive, setHasBeenActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [showPauseHint, setShowPauseHint] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -38,6 +40,10 @@ export function ReelCard({ video, onOpenComments }: ReelCardProps) {
     queryFn: () => getVideoLikesCount(video.id),
     placeholderData: 0,
   });
+
+  useEffect(() => {
+    if (isActive) setHasBeenActive(true);
+  }, [isActive]);
 
   useEffect(() => {
     setLiked(false);
@@ -58,6 +64,10 @@ export function ReelCard({ video, onOpenComments }: ReelCardProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["video-likes", video.id] });
+      // Обновляем интересы после лайка (fire-and-forget)
+      if (!liked && user) {
+        refreshUserInterests(user.id).catch(() => {});
+      }
     },
     onError: () => {
       setLiked((prev) => !prev);
@@ -93,8 +103,9 @@ export function ReelCard({ video, onOpenComments }: ReelCardProps) {
   const author = video.user;
   const likesCount = likesQuery.data ?? video.likesCount ?? 0;
   
+  // ✅ Ленивая загрузка - грузим видео только когда карточка стала активной
   const hlsUrl = getHlsUrl(video.hlsManifestUrl);
-  const videoSrc = hlsUrl || resolveMediaUrl(video.originalUrl, "stream");
+  const videoSrc = hasBeenActive ? (hlsUrl || resolveMediaUrl(video.originalUrl, "stream")) : null;
 
   return (
     <div
@@ -132,8 +143,8 @@ export function ReelCard({ video, onOpenComments }: ReelCardProps) {
 
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent p-4 pr-20">
           <Link to={`/users/${video.userId}`} className="flex items-center gap-2">
-            <Avatar url={author?.avatarUrl ?? null} name={author?.username ?? "?"} size="h-9 w-9" />
-            <span className="text-sm font-semibold text-white">{author?.username ?? "Unknown"}</span>
+            <Avatar url={author?.avatarUrl ?? null} name={author?.username ?? "User"} size="h-9 w-9" />
+            <span className="text-sm font-semibold text-white">{author?.username ?? "Unknown User"}</span>
           </Link>
           <p className="mt-2 line-clamp-2 text-sm font-medium text-white">{video.title}</p>
           {video.description && (

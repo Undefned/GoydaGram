@@ -35,14 +35,13 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
     setLoadError(false);
     let hls: Hls | null = null;
 
-    // Пробуем HLS
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
     } else if (Hls.isSupported()) {
       hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: true
-    });
+        lowLatencyMode: true,
+      });
       
       hls.loadSource(src);
       hls.attachMedia(video);
@@ -56,7 +55,6 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
       hls.on(Hls.Events.ERROR, (event, data) => {
         console.error("HLS Error:", data);
         
-        // Если ошибка критическая - пробуем перезагрузить или переключиться на MP4
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -68,7 +66,7 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
               hls?.recoverMediaError();
               break;
             default:
-              console.log("HLS fatal error, fallback to MP4");
+              console.log("HLS fatal error");
               setLoadError(true);
               if (onError) onError();
               hls?.destroy();
@@ -77,7 +75,6 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
         }
       });
     } else {
-      // Если HLS не поддерживается
       video.src = src;
       video.onerror = () => {
         console.error("Video load error");
@@ -104,10 +101,11 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
     }
   }, [active]);
 
+  // ✅ Когда src === null - показываем постер, а не "Video not available"
   if (!src) {
     return (
-      <div className={className ?? "w-full h-full rounded-xl bg-black flex items-center justify-center"}>
-        <p className="text-ink-400 text-sm">Video not available</p>
+      <div className={className ?? "w-full h-full rounded-xl bg-black"}>
+        {poster && <img src={poster} className="h-full w-full object-cover" alt="" />}
       </div>
     );
   }

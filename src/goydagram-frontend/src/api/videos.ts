@@ -4,33 +4,18 @@ import type { UpdateVideoInput, Video } from "@/types";
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
 
 export async function getVideo(id: string) {
-  try {
-    const { data } = await api.get<Video>(`/api/Videos/${id}`);
-    return data;
-  } catch (error) {
-    console.error("Failed to fetch video:", error);
-    throw error;
-  }
+  const { data } = await api.get<Video>(`/api/Videos/${id}`);
+  return data;
 }
 
 export async function getVideosBatch(videoIds: string[]) {
-  try {
-    const { data } = await api.post<Video[]>("/api/Videos/batch", { videoIds });
-    return data;
-  } catch (error) {
-    console.error("Failed to fetch videos batch:", error);
-    return [];
-  }
+  const { data } = await api.post<Video[]>("/api/Videos/batch", { videoIds });
+  return data;
 }
 
 export async function getTrendingVideos(limit = 30) {
-  try {
-    const { data } = await api.get<Video[]>("/api/Videos/trending", { params: { limit } });
-    return data;
-  } catch (error) {
-    console.error("Failed to fetch trending videos:", error);
-    return [];
-  }
+  const { data } = await api.get<Video[]>("/api/Videos/trending", { params: { limit } });
+  return data;
 }
 
 export async function getMyVideos(limit = 30, offset = 0) {
@@ -47,16 +32,11 @@ export async function getMyVideos(limit = 30, offset = 0) {
 }
 
 export async function getUserVideos(userId: string, limit = 30, offset = 0) {
-  try {
-    const { data } = await api.get<{ data: Video[]; pagination: { limit: number; offset: number } }>(
-      `/api/Videos/user/${userId}`,
-      { params: { limit, offset } }
-    );
-    return data;
-  } catch (error) {
-    console.error("Failed to fetch user videos:", error);
-    return { data: [], pagination: { limit, offset } };
-  }
+  const { data } = await api.get<{ data: Video[]; pagination: { limit: number; offset: number } }>(
+    `/api/Videos/user/${userId}`,
+    { params: { limit, offset } }
+  );
+  return data;
 }
 
 export async function uploadVideo(
@@ -79,23 +59,13 @@ export async function uploadVideo(
 }
 
 export async function updateVideo(id: string, input: UpdateVideoInput) {
-  try {
-    const { data } = await api.put<Video>(`/api/Videos/${id}`, input);
-    return data;
-  } catch (error) {
-    console.error("Failed to update video:", error);
-    throw error;
-  }
+  const { data } = await api.put<Video>(`/api/Videos/${id}`, input);
+  return data;
 }
 
 export async function deleteVideo(id: string) {
-  try {
-    const { data } = await api.delete(`/api/Videos/${id}`);
-    return data;
-  } catch (error) {
-    console.error("Failed to delete video:", error);
-    throw error;
-  }
+  const { data } = await api.delete(`/api/Videos/${id}`);
+  return data;
 }
 
 export function streamUrl(path: string) {
@@ -141,15 +111,10 @@ export function getHlsUrl(hlsManifestUrl: string | null | undefined): string | n
   }
   
   const cleanPath = hlsManifestUrl.replace(/^\/+/, "");
-  return `${BASE_URL}/api/videos/stream/${cleanPath}`;
-}
-
-// Добавляем проверку доступности видео
-export async function checkVideoAvailability(videoId: string): Promise<boolean> {
-  try {
-    const response = await api.head(`/api/videos/${videoId}`);
-    return response.status === 200;
-  } catch {
-    return false;
+  
+  if (cleanPath.startsWith("hls/")) {
+    return `${BASE_URL}/api/videos/stream/${cleanPath}`;
   }
+  
+  return `${BASE_URL}/api/videos/stream/hls/${cleanPath}`;
 }
